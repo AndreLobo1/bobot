@@ -1,0 +1,6 @@
+python-telegram-bot[job-queue]
+python-dotenv
+gspread
+oauth2client
+pandas
+google-generativeai
