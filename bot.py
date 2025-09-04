@@ -86,14 +86,6 @@ def parse_ano_mes(texto):
     """Extrai ano e mês do texto do usuário."""
     logger.info(f"🔍 Parsing texto: '{texto}'")
     
-    # Padrões aceitos: "2024/09", "2024-09", "09/2024", "setembro 2024", etc.
-    padroes = [
-        r'(\d{4})[/-](\d{1,2})',  # 2024/09 ou 2024-09
-        r'(\d{1,2})[/-](\d{4})',  # 09/2024 ou 09-2024
-        r'(\d{4})\s+(\d{1,2})',   # 2024 09
-        r'(\d{1,2})\s+(\d{4})',   # 09 2024
-    ]
-    
     texto_limpo = texto.strip().lower()
     logger.info(f"🔍 Texto limpo: '{texto_limpo}'")
     
@@ -113,34 +105,48 @@ def parse_ano_mes(texto):
         'dezembro': 12, 'dez': 12, '12': 12
     }
     
-    # Tenta encontrar mês por nome
+    # ESTRATÉGIA 1: Buscar por mês por nome primeiro
     for mes_nome, mes_num in meses.items():
         if mes_nome in texto_limpo:
             logger.info(f"🔍 Encontrou mês por nome: '{mes_nome}' -> {mes_num}")
-            # Procura por ano após o mês
+            # Procura por ano (4 dígitos)
             ano_match = re.search(r'(\d{4})', texto_limpo)
             if ano_match:
                 ano = int(ano_match.group(1))
                 logger.info(f"🔍 Resultado final (nome): ano={ano}, mes={mes_num}")
                 return ano, mes_num
     
-    # Tenta padrões numéricos
-    for i, padrao in enumerate(padroes):
-        match = re.search(padrao, texto_limpo)
-        if match:
-            grupo1, grupo2 = match.groups()
-            logger.info(f"🔍 Padrão {i+1} encontrado: grupo1='{grupo1}', grupo2='{grupo2}'")
-            # Determina qual é ano e qual é mês
-            if len(grupo1) == 4:  # grupo1 é ano
-                ano = int(grupo1)
-                mes = int(grupo2)
-                logger.info(f"🔍 Resultado final (numérico): ano={ano}, mes={mes}")
-                return ano, mes
-            else:  # grupo2 é ano
-                ano = int(grupo2)
-                mes = int(grupo1)
-                logger.info(f"🔍 Resultado final (numérico): ano={ano}, mes={mes}")
-                return ano, mes
+    # ESTRATÉGIA 2: Padrão YYYY/MM ou YYYY-MM
+    match = re.search(r'(\d{4})[/-](\d{1,2})', texto_limpo)
+    if match:
+        ano = int(match.group(1))
+        mes = int(match.group(2))
+        logger.info(f"🔍 Resultado final (YYYY/MM): ano={ano}, mes={mes}")
+        return ano, mes
+    
+    # ESTRATÉGIA 3: Padrão MM/YYYY ou MM-YYYY
+    match = re.search(r'(\d{1,2})[/-](\d{4})', texto_limpo)
+    if match:
+        mes = int(match.group(1))
+        ano = int(match.group(2))
+        logger.info(f"🔍 Resultado final (MM/YYYY): ano={ano}, mes={mes}")
+        return ano, mes
+    
+    # ESTRATÉGIA 4: Padrão YYYY MM (com espaço)
+    match = re.search(r'(\d{4})\s+(\d{1,2})', texto_limpo)
+    if match:
+        ano = int(match.group(1))
+        mes = int(match.group(2))
+        logger.info(f"🔍 Resultado final (YYYY MM): ano={ano}, mes={mes}")
+        return ano, mes
+    
+    # ESTRATÉGIA 5: Padrão MM YYYY (com espaço)
+    match = re.search(r'(\d{1,2})\s+(\d{4})', texto_limpo)
+    if match:
+        mes = int(match.group(1))
+        ano = int(match.group(2))
+        logger.info(f"🔍 Resultado final (MM YYYY): ano={ano}, mes={mes}")
+        return ano, mes
     
     logger.error(f"❌ Nenhum padrão encontrado para: '{texto}'")
     return None, None
