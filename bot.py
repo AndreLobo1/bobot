@@ -140,14 +140,15 @@ async def buscar_grafico_planilha(ano, mes):
         
         spreadsheet = gc.open(SPREADSHEET_NAME)
         
-        # Tenta diferentes estratégias para encontrar o gráfico
+        # Estratégia principal: buscar na aba Home onde os gráficos são criados dinamicamente
+        resultado = await buscar_grafico_aba_home(spreadsheet, ano, mes)
+        if resultado[0]:
+            return resultado
+        
+        # Estratégias alternativas se não encontrar na Home
         estrategias = [
-            # Estratégia 1: Procurar por gráficos em todas as abas
             lambda: buscar_graficos_todas_abas(spreadsheet, ano, mes),
-            # Estratégia 2: Procurar por aba específica com nome do mês/ano
             lambda: buscar_aba_especifica(spreadsheet, ano, mes),
-            # Estratégia 3: Procurar por gráficos em células específicas
-            lambda: buscar_graficos_celulas(spreadsheet, ano, mes)
         ]
         
         for estrategia in estrategias:
@@ -155,11 +156,72 @@ async def buscar_grafico_planilha(ano, mes):
             if resultado[0]:  # Se encontrou gráfico
                 return resultado
         
-        return None, f"Nenhum gráfico encontrado para {mes:02d}/{ano}"
+        return None, f"Nenhum gráfico encontrado para {mes:02d}/{ano}. Verifique se a aba 'Home' tem dados para este período."
         
     except Exception as e:
         logger.error(f"Erro ao buscar gráfico: {e}")
         return None, f"Erro interno: {str(e)}"
+
+async def buscar_grafico_aba_home(spreadsheet, ano, mes):
+    """Busca gráficos na aba Home onde são criados dinamicamente."""
+    try:
+        # Procura pela aba Home
+        home_sheet = None
+        try:
+            home_sheet = spreadsheet.worksheet("Home")
+        except:
+            return None, "Aba 'Home' não encontrada"
+        
+        # Verifica se há gráficos na aba Home
+        charts = home_sheet.get_charts()
+        if not charts:
+            return None, "Nenhum gráfico encontrado na aba 'Home'"
+        
+        # Filtra gráficos por tipo (Entradas ou Saídas)
+        graficos_disponiveis = []
+        
+        for chart in charts:
+            chart_title = chart.get('title', '').lower()
+            chart_type = None
+            
+            if 'entrada' in chart_title:
+                chart_type = 'entradas'
+            elif 'saída' in chart_title or 'saida' in chart_title:
+                chart_type = 'saidas'
+            elif 'cash flow' in chart_title or 'cashflow' in chart_title:
+                chart_type = 'cashflow'
+            else:
+                # Se não consegue identificar, assume que é um gráfico válido
+                chart_type = 'geral'
+            
+            graficos_disponiveis.append({
+                'chart': chart,
+                'type': chart_type,
+                'title': chart.get('title', 'Gráfico sem título')
+            })
+        
+        if not graficos_disponiveis:
+            return None, "Nenhum gráfico válido encontrado na aba 'Home'"
+        
+        # Retorna o primeiro gráfico encontrado (pode ser expandido para escolha)
+        primeiro_grafico = graficos_disponiveis[0]
+        chart_image = primeiro_grafico['chart'].get_image()
+        
+        if chart_image:
+            tipo_descricao = {
+                'entradas': 'Gráfico de Entradas',
+                'saidas': 'Gráfico de Saídas', 
+                'cashflow': 'Gráfico de Cash Flow',
+                'geral': 'Gráfico Geral'
+            }.get(primeiro_grafico['type'], 'Gráfico')
+            
+            return chart_image, f"{tipo_descricao} encontrado na aba 'Home' para {mes:02d}/{ano}"
+        
+        return None, "Não foi possível obter a imagem do gráfico"
+        
+    except Exception as e:
+        logger.error(f"Erro ao buscar na aba Home: {e}")
+        return None, f"Erro ao buscar na aba Home: {str(e)}"
 
 def buscar_graficos_todas_abas(spreadsheet, ano, mes):
     """Busca gráficos em todas as abas da planilha."""
@@ -218,34 +280,6 @@ def buscar_aba_especifica(spreadsheet, ano, mes):
         logger.error(f"Erro ao buscar aba específica: {e}")
         return None, f"Erro ao buscar aba específica: {str(e)}"
 
-def buscar_graficos_celulas(spreadsheet, ano, mes):
-    """Busca gráficos em células específicas."""
-    try:
-        # Procura na primeira aba por padrões de data
-        ws = spreadsheet.worksheets()[0]  # Primeira aba
-        
-        # Procura por células que contenham o ano/mês
-        all_values = ws.get_all_values()
-        
-        for row_idx, row in enumerate(all_values):
-            for col_idx, cell in enumerate(row):
-                if str(ano) in str(cell) and str(mes) in str(cell):
-                    # Verifica se há gráfico próximo
-                    try:
-                        # Tenta obter gráfico da célula atual
-                        chart = ws.get_chart(row_idx + 1, col_idx + 1)
-                        if chart:
-                            chart_image = chart.get_image()
-                            if chart_image:
-                                return chart_image, f"Gráfico encontrado na célula {chr(65+col_idx)}{row_idx+1}"
-                    except:
-                        continue
-        
-        return None, "Gráfico não encontrado nas células"
-    except Exception as e:
-        logger.error(f"Erro ao buscar em células: {e}")
-        return None, f"Erro ao buscar células: {str(e)}"
-
 # --- COMANDOS DO BOT ---
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Envia uma mensagem de boas-vindas completa."""
@@ -295,7 +329,11 @@ async def grafico_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• <code>/grafico 2024/09</code>\n"
             "• <code>/grafico setembro 2024</code>\n"
             "• <code>/grafico 09/2024</code>\n\n"
-            "O bot irá procurar por gráficos que correspondam ao período especificado.",
+            "O bot irá procurar por gráficos na aba 'Home' que correspondam ao período especificado.\n\n"
+            "<b>Tipos de gráficos disponíveis:</b>\n"
+            "• Gráfico de Entradas por Categoria\n"
+            "• Gráfico de Saídas por Categoria\n"
+            "• Gráfico de Cash Flow Mensal",
             parse_mode='HTML'
         )
         return
@@ -306,7 +344,7 @@ async def grafico_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Envia mensagem de processamento
     processing_msg = await update.message.reply_text(
         f"🔍 Buscando gráfico para: <b>{texto_periodo}</b>\n"
-        "Isso pode levar alguns segundos...",
+        "Procurando na aba 'Home'...",
         parse_mode='HTML'
     )
     
@@ -360,9 +398,10 @@ async def grafico_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Período: <b>{mes:02d}/{ano}</b>\n"
                 f"Erro: <i>{message}</i>\n\n"
                 "<b>Dicas:</b>\n"
-                "• Verifique se existe um gráfico na planilha para este período\n"
-                "• Certifique-se de que o gráfico está visível e não oculto\n"
-                "• Tente um período diferente",
+                "• Verifique se a aba 'Home' tem dados para este período\n"
+                "• Certifique-se de que os gráficos foram gerados na aba 'Home'\n"
+                "• Tente selecionar o período na aba 'Home' primeiro\n"
+                "• Verifique se há transações na aba 'Transações' para este período",
                 parse_mode='HTML'
             )
     
