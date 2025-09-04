@@ -1,6 +1,6 @@
 # 🤖 Bot Financeiro Pessoal
 
-Um assistente financeiro inteligente para Telegram que conecta diretamente com sua planilha Google Sheets para fornecer informações rápidas sobre saldos e transações.
+Um assistente financeiro inteligente para Telegram que conecta diretamente com sua planilha Google Sheets para fornecer informações rápidas sobre saldos, transações e gráficos financeiros.
 
 ## 📋 Funcionalidades
 
@@ -9,12 +9,14 @@ Um assistente financeiro inteligente para Telegram que conecta diretamente com s
 - **`/start`** - Mensagem de boas-vindas personalizada com lista de comandos
 - **`/help`** - Ajuda detalhada sobre todas as funcionalidades
 - **`/saldo`** - Mostra saldos atualizados de todas as contas com total geral
+- **`/grafico [ano/mês]`** - Busca e envia gráficos da planilha para período específico
 - **`/status`** - Verifica a saúde do cache e quando foi a última atualização
 
 ### 💡 Características Principais
 
 - **Cache Inteligente**: Sistema de cache que mantém dados por 1 dia
 - **Parsing Robusto**: Converte valores monetários brasileiros automaticamente
+- **Busca de Gráficos**: Localiza e envia gráficos da planilha por período
 - **Formatação HTML**: Mensagens bem formatadas e legíveis
 - **Logs Detalhados**: Sistema de logging para monitoramento
 - **Tratamento de Erros**: Respostas amigáveis para problemas de conexão
@@ -26,7 +28,7 @@ Um assistente financeiro inteligente para Telegram que conecta diretamente com s
 - Docker e Docker Compose instalados
 - Conta Google Cloud com Google Sheets API habilitada
 - Bot do Telegram criado via @BotFather
-- Planilha Google Sheets com aba "Saldos"
+- Planilha Google Sheets com aba "Saldos" e gráficos
 
 ### 1. Configuração Inicial
 
@@ -79,6 +81,14 @@ A planilha deve ter uma aba chamada "Saldos" com as seguintes colunas:
 | `CONTA` | Nome da conta bancária | "Nubank", "Itaú" |
 | `SALDO ATUAL (R$)` | Saldo atual da conta | "R$ 1.234,56" |
 
+### Gráficos
+
+Para o comando `/grafico` funcionar, sua planilha deve conter gráficos que podem ser:
+
+- **Gráficos em abas específicas**: Abas nomeadas com padrões como "2024-09", "09/2024", etc.
+- **Gráficos em qualquer aba**: Com títulos que contenham o ano/mês
+- **Gráficos em células**: Localizados próximos a células com datas
+
 ### Exemplo de Dados
 
 ```
@@ -115,14 +125,22 @@ O bot utiliza um sistema de cache inteligente para otimizar performance:
 - **Fallback**: Busca dados da planilha se cache estiver vazio
 - **Timestamp**: Mostra quando foi a última atualização
 
+### Busca de Gráficos
+
+O comando `/grafico` utiliza múltiplas estratégias para encontrar gráficos:
+
+1. **Busca em Todas as Abas**: Procura por gráficos em todas as abas da planilha
+2. **Busca em Aba Específica**: Procura por abas com nomes como "2024-09", "09/2024"
+3. **Busca em Células**: Procura por gráficos próximos a células com datas
+
 ### Fluxo de Funcionamento
 
 1. **Inicialização**: Bot inicia e conecta ao Telegram
-2. **Primeira Requisição**: Usuário envia `/saldo`
-3. **Verificação de Cache**: Bot verifica se tem dados em cache
+2. **Primeira Requisição**: Usuário envia `/saldo` ou `/grafico`
+3. **Verificação de Cache**: Bot verifica se tem dados em cache (apenas para saldos)
 4. **Busca de Dados**: Se necessário, busca da planilha Google Sheets
-5. **Processamento**: Converte valores monetários brasileiros
-6. **Resposta**: Envia mensagem formatada com saldos
+5. **Processamento**: Converte valores monetários brasileiros ou localiza gráficos
+6. **Resposta**: Envia mensagem formatada ou imagem do gráfico
 
 ## 🛠️ Desenvolvimento
 
@@ -147,6 +165,8 @@ bobot/
 - `gspread` - Integração com Google Sheets
 - `oauth2client` - Autenticação Google
 - `pandas` - Manipulação de dados
+- `Pillow` - Processamento de imagens
+- `requests` - Requisições HTTP
 
 ### Funções Principais
 
@@ -164,6 +184,16 @@ bobot/
 - Converte valores monetários brasileiros
 - Remove "R$", pontos e vírgulas
 - Retorna float para cálculos
+
+#### `parse_ano_mes(texto)`
+- Extrai ano e mês do texto do usuário
+- Suporta múltiplos formatos (2024/09, setembro 2024, etc.)
+- Valida entrada do usuário
+
+#### `buscar_grafico_planilha(ano, mes)`
+- Coordena a busca de gráficos
+- Utiliza múltiplas estratégias de busca
+- Retorna imagem do gráfico ou mensagem de erro
 
 ## 🧪 Como Testar
 
@@ -185,6 +215,7 @@ docker-compose logs -f
 4. Teste os comandos:
    - `/help` - Ver ajuda
    - `/saldo` - Ver saldos
+   - `/grafico 2024/09` - Buscar gráfico
    - `/status` - Ver status do cache
 
 ### 3. Verificar Funcionamento
@@ -201,6 +232,48 @@ docker-compose logs -f
 
 🔄 Cache de 04/09/2024 14:30:15
 ```
+
+**Resposta esperada do `/grafico 2024/09`:**
+```
+🔍 Buscando gráfico para: 2024/09
+Isso pode levar alguns segundos...
+
+📊 Gráfico 09/2024
+
+Gráfico encontrado na aba '2024-09'
+```
+
+## 📊 Comando Gráfico
+
+### Como Usar
+
+O comando `/grafico` permite buscar gráficos da sua planilha por período:
+
+```bash
+/grafico 2024/09          # Setembro de 2024
+/grafico setembro 2024     # Setembro de 2024
+/grafico 09/2024           # Setembro de 2024
+/grafico 2024-09           # Setembro de 2024
+```
+
+### Formatos Aceitos
+
+- **Numérico**: `2024/09`, `09/2024`, `2024-09`, `09-2024`
+- **Texto**: `setembro 2024`, `set 2024`, `dezembro 2024`
+- **Misto**: `2024 09`, `09 2024`
+
+### Estratégias de Busca
+
+1. **Busca por Título**: Procura gráficos com ano/mês no título
+2. **Busca por Aba**: Procura abas nomeadas com o período
+3. **Busca por Célula**: Procura gráficos próximos a células com datas
+
+### Dicas para Gráficos
+
+- **Nomeie suas abas** com padrões como "2024-09" ou "09/2024"
+- **Use títulos descritivos** nos gráficos incluindo o período
+- **Mantenha os gráficos visíveis** (não ocultos)
+- **Teste diferentes formatos** de data
 
 ## 🔍 Troubleshooting
 
@@ -222,7 +295,16 @@ docker-compose logs -f
 - Confirmar se as colunas são "CONTA" e "SALDO ATUAL (R$)"
 - Verificar se não há espaços extras nos nomes
 
-#### 3. Bot não responde
+#### 3. "Gráfico não encontrado"
+
+**Causa**: Gráfico não existe ou não está acessível
+**Solução**:
+- Verificar se existe gráfico para o período solicitado
+- Confirmar se o gráfico está visível (não oculto)
+- Tentar diferentes formatos de data
+- Verificar se a planilha tem permissões adequadas
+
+#### 4. Bot não responde
 
 **Causa**: Problemas de conexão ou token inválido
 **Solução**:
@@ -241,6 +323,9 @@ docker-compose logs bot
 
 # Ver logs de erro
 docker-compose logs bot | grep ERROR
+
+# Ver logs de gráfico
+docker-compose logs bot | grep -i grafico
 ```
 
 ## 🔐 Segurança
@@ -264,6 +349,7 @@ docker-compose logs bot | grep ERROR
 
 - **Tempo de resposta** do comando `/saldo`
 - **Taxa de sucesso** das atualizações de cache
+- **Taxa de sucesso** da busca de gráficos
 - **Erros de autenticação** com Google Sheets
 - **Uso de memória** do container Docker
 
@@ -274,7 +360,9 @@ O bot gera logs detalhados para monitoramento:
 ```
 2024-09-04 14:30:15 - __main__ - INFO - 🔄 Atualizando cache...
 2024-09-04 14:30:16 - __main__ - INFO - ✅ Cache de saldos atualizado: 3 registros.
-2024-09-04 14:30:17 - __main__ - INFO - Bot iniciado no modo Polling...
+2024-09-04 14:30:17 - __main__ - INFO - 🔍 Buscando gráfico para: 2024/09
+2024-09-04 14:30:18 - __main__ - INFO - 📊 Gráfico encontrado na aba '2024-09'
+2024-09-04 14:30:19 - __main__ - INFO - Bot iniciado no modo Polling...
 ```
 
 ## 🤝 Contribuição
@@ -308,7 +396,7 @@ Este projeto está sob a licença MIT. Veja o arquivo LICENSE para mais detalhes
 
 ### Informações Úteis
 
-- **Versão do Bot**: 1.0.0
+- **Versão do Bot**: 1.1.0
 - **Python**: 3.11
 - **Docker**: Última versão estável
 - **Telegram Bot API**: v6.0+

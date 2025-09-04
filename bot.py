@@ -2,10 +2,14 @@ import os
 import json
 import logging
 import base64
+import re
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+import requests
+from PIL import Image
+import io
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -78,6 +82,170 @@ def parse_valor_brl(valor_raw):
         logger.error(f"Não foi possível converter o valor '{valor_raw}' para float.")
         return 0.0
 
+def parse_ano_mes(texto):
+    """Extrai ano e mês do texto do usuário."""
+    # Padrões aceitos: "2024/09", "2024-09", "09/2024", "setembro 2024", etc.
+    padroes = [
+        r'(\d{4})[/-](\d{1,2})',  # 2024/09 ou 2024-09
+        r'(\d{1,2})[/-](\d{4})',  # 09/2024 ou 09-2024
+        r'(\d{4})\s+(\d{1,2})',   # 2024 09
+        r'(\d{1,2})\s+(\d{4})',   # 09 2024
+    ]
+    
+    texto_limpo = texto.strip().lower()
+    
+    # Mapeamento de meses por nome
+    meses = {
+        'janeiro': '01', 'jan': '01', '1': '01',
+        'fevereiro': '02', 'fev': '02', '2': '02',
+        'março': '03', 'mar': '03', '3': '03',
+        'abril': '04', 'abr': '04', '4': '04',
+        'maio': '05', 'mai': '05', '5': '05',
+        'junho': '06', 'jun': '06', '6': '06',
+        'julho': '07', 'jul': '07', '7': '07',
+        'agosto': '08', 'ago': '08', '8': '08',
+        'setembro': '09', 'set': '09', '9': '09',
+        'outubro': '10', 'out': '10', '10': '10',
+        'novembro': '11', 'nov': '11', '11': '11',
+        'dezembro': '12', 'dez': '12', '12': '12'
+    }
+    
+    # Tenta encontrar mês por nome
+    for mes_nome, mes_num in meses.items():
+        if mes_nome in texto_limpo:
+            # Procura por ano após o mês
+            ano_match = re.search(r'(\d{4})', texto_limpo)
+            if ano_match:
+                return int(ano_match.group(1)), int(mes_num)
+    
+    # Tenta padrões numéricos
+    for padrao in padroes:
+        match = re.search(padrao, texto_limpo)
+        if match:
+            grupo1, grupo2 = match.groups()
+            # Determina qual é ano e qual é mês
+            if len(grupo1) == 4:  # grupo1 é ano
+                return int(grupo1), int(grupo2)
+            else:  # grupo2 é ano
+                return int(grupo2), int(grupo1)
+    
+    return None, None
+
+async def buscar_grafico_planilha(ano, mes):
+    """Busca gráfico da planilha baseado no ano/mês."""
+    try:
+        gc = get_google_sheets_client()
+        if not gc:
+            return None, "Erro de autenticação com Google Sheets"
+        
+        spreadsheet = gc.open(SPREADSHEET_NAME)
+        
+        # Tenta diferentes estratégias para encontrar o gráfico
+        estrategias = [
+            # Estratégia 1: Procurar por gráficos em todas as abas
+            lambda: buscar_graficos_todas_abas(spreadsheet, ano, mes),
+            # Estratégia 2: Procurar por aba específica com nome do mês/ano
+            lambda: buscar_aba_especifica(spreadsheet, ano, mes),
+            # Estratégia 3: Procurar por gráficos em células específicas
+            lambda: buscar_graficos_celulas(spreadsheet, ano, mes)
+        ]
+        
+        for estrategia in estrategias:
+            resultado = estrategia()
+            if resultado[0]:  # Se encontrou gráfico
+                return resultado
+        
+        return None, f"Nenhum gráfico encontrado para {mes:02d}/{ano}"
+        
+    except Exception as e:
+        logger.error(f"Erro ao buscar gráfico: {e}")
+        return None, f"Erro interno: {str(e)}"
+
+def buscar_graficos_todas_abas(spreadsheet, ano, mes):
+    """Busca gráficos em todas as abas da planilha."""
+    try:
+        # Lista todas as abas
+        worksheets = spreadsheet.worksheets()
+        
+        for ws in worksheets:
+            try:
+                # Verifica se a aba tem gráficos
+                charts = ws.get_charts()
+                if charts:
+                    # Verifica se algum gráfico corresponde ao período
+                    for chart in charts:
+                        chart_title = chart.get('title', '').lower()
+                        if f"{ano}" in chart_title or f"{mes:02d}" in chart_title:
+                            # Tenta obter a imagem do gráfico
+                            chart_image = chart.get_image()
+                            if chart_image:
+                                return chart_image, f"Gráfico encontrado na aba '{ws.title}'"
+            except Exception as e:
+                logger.warning(f"Erro ao verificar aba {ws.title}: {e}")
+                continue
+        
+        return None, "Nenhum gráfico encontrado nas abas"
+    except Exception as e:
+        logger.error(f"Erro ao buscar em todas as abas: {e}")
+        return None, f"Erro ao buscar abas: {str(e)}"
+
+def buscar_aba_especifica(spreadsheet, ano, mes):
+    """Busca em aba específica com nome do mês/ano."""
+    try:
+        # Padrões de nomes de aba para procurar
+        padroes_aba = [
+            f"{ano}-{mes:02d}",
+            f"{mes:02d}-{ano}",
+            f"{ano}/{mes:02d}",
+            f"{mes:02d}/{ano}",
+            f"{ano}_{mes:02d}",
+            f"{mes:02d}_{ano}"
+        ]
+        
+        for padrao in padroes_aba:
+            try:
+                ws = spreadsheet.worksheet(padrao)
+                charts = ws.get_charts()
+                if charts:
+                    chart_image = charts[0].get_image()
+                    if chart_image:
+                        return chart_image, f"Gráfico encontrado na aba '{padrao}'"
+            except:
+                continue
+        
+        return None, "Aba específica não encontrada"
+    except Exception as e:
+        logger.error(f"Erro ao buscar aba específica: {e}")
+        return None, f"Erro ao buscar aba específica: {str(e)}"
+
+def buscar_graficos_celulas(spreadsheet, ano, mes):
+    """Busca gráficos em células específicas."""
+    try:
+        # Procura na primeira aba por padrões de data
+        ws = spreadsheet.worksheets()[0]  # Primeira aba
+        
+        # Procura por células que contenham o ano/mês
+        all_values = ws.get_all_values()
+        
+        for row_idx, row in enumerate(all_values):
+            for col_idx, cell in enumerate(row):
+                if str(ano) in str(cell) and str(mes) in str(cell):
+                    # Verifica se há gráfico próximo
+                    try:
+                        # Tenta obter gráfico da célula atual
+                        chart = ws.get_chart(row_idx + 1, col_idx + 1)
+                        if chart:
+                            chart_image = chart.get_image()
+                            if chart_image:
+                                return chart_image, f"Gráfico encontrado na célula {chr(65+col_idx)}{row_idx+1}"
+                    except:
+                        continue
+        
+        return None, "Gráfico não encontrado nas células"
+    except Exception as e:
+        logger.error(f"Erro ao buscar em células: {e}")
+        return None, f"Erro ao buscar células: {str(e)}"
+
 # --- COMANDOS DO BOT ---
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Envia uma mensagem de boas-vindas completa."""
@@ -87,6 +255,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Eu sou seu assistente financeiro pessoal, pronto para te dar acesso rápido aos seus dados.\n\n"
         "Aqui estão os comandos que você pode usar:\n"
         " • <code>/saldo</code> - Mostra os saldos atualizados de todas as suas contas.\n"
+        " • <code>/grafico 2024/09</code> - Busca gráfico da planilha para ano/mês específico.\n"
         " • <code>/status</code> - Verifica a saúde do meu cache de dados.\n"
         " • <code>/help</code> - Exibe esta mensagem de ajuda novamente.\n\n"
         "Para começar, que tal um <code>/saldo</code>?"
@@ -100,6 +269,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Aqui estão os detalhes dos comandos disponíveis:\n\n"
         "▫️ <code>/saldo</code>\n"
         "Busca os saldos mais recentes de todas as suas contas diretamente da sua planilha Google Sheets. A resposta é quase instantânea graças a um sistema de cache inteligente.\n\n"
+        "▫️ <code>/grafico [ano/mês]</code>\n"
+        "Busca e envia gráficos da sua planilha para um período específico.\n"
+        "<b>Exemplos:</b>\n"
+        "• <code>/grafico 2024/09</code>\n"
+        "• <code>/grafico setembro 2024</code>\n"
+        "• <code>/grafico 09/2024</code>\n\n"
         "▫️ <code>/status</code>\n"
         "Mostra informações de diagnóstico sobre o cache de dados, incluindo quando foi a última vez que os dados foram atualizados da planilha.\n\n"
         "▫️ <code>/start</code>\n"
@@ -108,6 +283,98 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Mostra esta mensagem."
     )
     await update.message.reply_text(help_message, parse_mode='HTML')
+
+async def grafico_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Busca e envia gráfico da planilha para ano/mês específico."""
+    # Verifica se foi fornecido argumento
+    if not context.args:
+        await update.message.reply_text(
+            "📊 <b>Comando Gráfico</b>\n\n"
+            "Use este comando para buscar gráficos da sua planilha:\n\n"
+            "<b>Exemplos:</b>\n"
+            "• <code>/grafico 2024/09</code>\n"
+            "• <code>/grafico setembro 2024</code>\n"
+            "• <code>/grafico 09/2024</code>\n\n"
+            "O bot irá procurar por gráficos que correspondam ao período especificado.",
+            parse_mode='HTML'
+        )
+        return
+    
+    # Junta os argumentos em uma string
+    texto_periodo = ' '.join(context.args)
+    
+    # Envia mensagem de processamento
+    processing_msg = await update.message.reply_text(
+        f"🔍 Buscando gráfico para: <b>{texto_periodo}</b>\n"
+        "Isso pode levar alguns segundos...",
+        parse_mode='HTML'
+    )
+    
+    # Extrai ano e mês
+    ano, mes = parse_ano_mes(texto_periodo)
+    
+    if ano is None or mes is None:
+        await processing_msg.edit_text(
+            f"❌ <b>Formato inválido!</b>\n\n"
+            f"Não consegui entender o período: <b>{texto_periodo}</b>\n\n"
+            "<b>Formatos aceitos:</b>\n"
+            "• <code>/grafico 2024/09</code>\n"
+            "• <code>/grafico setembro 2024</code>\n"
+            "• <code>/grafico 09/2024</code>",
+            parse_mode='HTML'
+        )
+        return
+    
+    # Valida ano e mês
+    if ano < 2000 or ano > 2030:
+        await processing_msg.edit_text(
+            f"❌ <b>Ano inválido!</b>\n\n"
+            f"O ano deve estar entre 2000 e 2030. Você informou: <b>{ano}</b>",
+            parse_mode='HTML'
+        )
+        return
+    
+    if mes < 1 or mes > 12:
+        await processing_msg.edit_text(
+            f"❌ <b>Mês inválido!</b>\n\n"
+            f"O mês deve estar entre 1 e 12. Você informou: <b>{mes}</b>",
+            parse_mode='HTML'
+        )
+        return
+    
+    # Busca o gráfico
+    try:
+        chart_image, message = await buscar_grafico_planilha(ano, mes)
+        
+        if chart_image:
+            # Envia a imagem do gráfico
+            await update.message.reply_photo(
+                photo=chart_image,
+                caption=f"📊 <b>Gráfico {mes:02d}/{ano}</b>\n\n{message}",
+                parse_mode='HTML'
+            )
+            await processing_msg.delete()
+        else:
+            await processing_msg.edit_text(
+                f"❌ <b>Gráfico não encontrado!</b>\n\n"
+                f"Período: <b>{mes:02d}/{ano}</b>\n"
+                f"Erro: <i>{message}</i>\n\n"
+                "<b>Dicas:</b>\n"
+                "• Verifique se existe um gráfico na planilha para este período\n"
+                "• Certifique-se de que o gráfico está visível e não oculto\n"
+                "• Tente um período diferente",
+                parse_mode='HTML'
+            )
+    
+    except Exception as e:
+        logger.error(f"Erro no comando gráfico: {e}")
+        await processing_msg.edit_text(
+            f"❌ <b>Erro interno!</b>\n\n"
+            f"Ocorreu um erro ao buscar o gráfico:\n"
+            f"<i>{str(e)}</i>\n\n"
+            "Tente novamente mais tarde ou entre em contato com o suporte.",
+            parse_mode='HTML'
+        )
 
 async def saldo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Mostra os saldos das contas a partir do cache."""
@@ -179,10 +446,11 @@ def main() -> None:
 
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
-    # Adiciona os handlers para TODOS os comandos do MVP
+    # Adiciona os handlers para TODOS os comandos
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("saldo", saldo_command))
+    application.add_handler(CommandHandler("grafico", grafico_command))
     application.add_handler(CommandHandler("status", status_command))
 
     logger.info("Bot iniciado no modo Polling... Pressione Ctrl+C para parar.")
