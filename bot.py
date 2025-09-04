@@ -96,18 +96,18 @@ def parse_ano_mes(texto):
     
     # Mapeamento de meses por nome
     meses = {
-        'janeiro': '01', 'jan': '01', '1': '01',
-        'fevereiro': '02', 'fev': '02', '2': '02',
-        'março': '03', 'mar': '03', '3': '03',
-        'abril': '04', 'abr': '04', '4': '04',
-        'maio': '05', 'mai': '05', '5': '05',
-        'junho': '06', 'jun': '06', '6': '06',
-        'julho': '07', 'jul': '07', '7': '07',
-        'agosto': '08', 'ago': '08', '8': '08',
-        'setembro': '09', 'set': '09', '9': '09',
-        'outubro': '10', 'out': '10', '10': '10',
-        'novembro': '11', 'nov': '11', '11': '11',
-        'dezembro': '12', 'dez': '12', '12': '12'
+        'janeiro': 1, 'jan': 1, '1': 1,
+        'fevereiro': 2, 'fev': 2, '2': 2,
+        'março': 3, 'mar': 3, '3': 3,
+        'abril': 4, 'abr': 4, '4': 4,
+        'maio': 5, 'mai': 5, '5': 5,
+        'junho': 6, 'jun': 6, '6': 6,
+        'julho': 7, 'jul': 7, '7': 7,
+        'agosto': 8, 'ago': 8, '8': 8,
+        'setembro': 9, 'set': 9, '9': 9,
+        'outubro': 10, 'out': 10, '10': 10,
+        'novembro': 11, 'nov': 11, '11': 11,
+        'dezembro': 12, 'dez': 12, '12': 12
     }
     
     # Tenta encontrar mês por nome
@@ -116,7 +116,7 @@ def parse_ano_mes(texto):
             # Procura por ano após o mês
             ano_match = re.search(r'(\d{4})', texto_limpo)
             if ano_match:
-                return int(ano_match.group(1)), int(mes_num)
+                return int(ano_match.group(1)), mes_num
     
     # Tenta padrões numéricos
     for padrao in padroes:
@@ -131,6 +131,28 @@ def parse_ano_mes(texto):
     
     return None, None
 
+async def selecionar_periodo_planilha(spreadsheet, ano, mes):
+    """Seleciona automaticamente o período na aba Home da planilha."""
+    try:
+        home_sheet = spreadsheet.worksheet("Home")
+        
+        # Seleciona o mês (coluna B4)
+        home_sheet.update('B4', mes)
+        
+        # Seleciona o ano (coluna B5)
+        home_sheet.update('B5', ano)
+        
+        # Aguarda um pouco para os gráficos serem atualizados
+        import asyncio
+        await asyncio.sleep(2)
+        
+        logger.info(f"✅ Período selecionado na planilha: {mes:02d}/{ano}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Erro ao selecionar período na planilha: {e}")
+        return False
+
 async def buscar_grafico_planilha(ano, mes):
     """Busca gráfico da planilha baseado no ano/mês."""
     try:
@@ -140,7 +162,10 @@ async def buscar_grafico_planilha(ano, mes):
         
         spreadsheet = gc.open(SPREADSHEET_NAME)
         
-        # Estratégia principal: buscar na aba Home onde os gráficos são criados dinamicamente
+        # PRIMEIRO: Seleciona automaticamente o período na planilha
+        await selecionar_periodo_planilha(spreadsheet, ano, mes)
+        
+        # SEGUNDO: Busca na aba Home onde os gráficos são criados dinamicamente
         resultado = await buscar_grafico_aba_home(spreadsheet, ano, mes)
         if resultado[0]:
             return resultado
@@ -156,7 +181,7 @@ async def buscar_grafico_planilha(ano, mes):
             if resultado[0]:  # Se encontrou gráfico
                 return resultado
         
-        return None, f"Nenhum gráfico encontrado para {mes:02d}/{ano}. Verifique se a aba 'Home' tem dados para este período."
+        return None, f"Nenhum gráfico encontrado para {mes:02d}/{ano}. Verifique se há dados na aba 'Transações' para este período."
         
     except Exception as e:
         logger.error(f"Erro ao buscar gráfico: {e}")
@@ -172,10 +197,14 @@ async def buscar_grafico_aba_home(spreadsheet, ano, mes):
         except:
             return None, "Aba 'Home' não encontrada"
         
+        # Aguarda um pouco mais para garantir que os gráficos foram atualizados
+        import asyncio
+        await asyncio.sleep(1)
+        
         # Verifica se há gráficos na aba Home
         charts = home_sheet.get_charts()
         if not charts:
-            return None, "Nenhum gráfico encontrado na aba 'Home'"
+            return None, "Nenhum gráfico encontrado na aba 'Home'. Aguarde mais alguns segundos e tente novamente."
         
         # Filtra gráficos por tipo (Entradas ou Saídas)
         graficos_disponiveis = []
@@ -329,7 +358,10 @@ async def grafico_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• <code>/grafico 2024/09</code>\n"
             "• <code>/grafico setembro 2024</code>\n"
             "• <code>/grafico 09/2024</code>\n\n"
-            "O bot irá procurar por gráficos na aba 'Home' que correspondam ao período especificado.\n\n"
+            "O bot irá automaticamente:\n"
+            "1. Selecionar o período na aba 'Home'\n"
+            "2. Aguardar os gráficos serem gerados\n"
+            "3. Enviar a imagem do gráfico\n\n"
             "<b>Tipos de gráficos disponíveis:</b>\n"
             "• Gráfico de Entradas por Categoria\n"
             "• Gráfico de Saídas por Categoria\n"
@@ -344,7 +376,7 @@ async def grafico_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Envia mensagem de processamento
     processing_msg = await update.message.reply_text(
         f"🔍 Buscando gráfico para: <b>{texto_periodo}</b>\n"
-        "Procurando na aba 'Home'...",
+        "Selecionando período na planilha...",
         parse_mode='HTML'
     )
     
@@ -380,6 +412,14 @@ async def grafico_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
+    # Atualiza mensagem de processamento
+    await processing_msg.edit_text(
+        f"🔍 Buscando gráfico para: <b>{texto_periodo}</b>\n"
+        f"Período selecionado: <b>{mes:02d}/{ano}</b>\n"
+        "Aguardando gráficos serem gerados...",
+        parse_mode='HTML'
+    )
+    
     # Busca o gráfico
     try:
         chart_image, message = await buscar_grafico_planilha(ano, mes)
@@ -398,10 +438,9 @@ async def grafico_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Período: <b>{mes:02d}/{ano}</b>\n"
                 f"Erro: <i>{message}</i>\n\n"
                 "<b>Dicas:</b>\n"
-                "• Verifique se a aba 'Home' tem dados para este período\n"
-                "• Certifique-se de que os gráficos foram gerados na aba 'Home'\n"
-                "• Tente selecionar o período na aba 'Home' primeiro\n"
-                "• Verifique se há transações na aba 'Transações' para este período",
+                "• Verifique se há transações na aba 'Transações' para este período\n"
+                "• Certifique-se de que a aba 'Home' existe e está funcionando\n"
+                "• Tente um período diferente que tenha dados",
                 parse_mode='HTML'
             )
     
