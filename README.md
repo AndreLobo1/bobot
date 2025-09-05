@@ -1,19 +1,26 @@
 # 🤖 Bot Financeiro Pessoal
 
-Um assistente financeiro inteligente para Telegram que conecta diretamente com sua planilha Google Sheets para fornecer informações rápidas sobre saldos, transações e gráficos financeiros.
+Um assistente financeiro inteligente para Telegram que conecta diretamente com sua planilha Google Sheets para fornecer informações rápidas sobre saldos, transações e gráficos financeiros. **Agora com Inteligência Artificial integrada!**
 
 ## 📋 Funcionalidades
+
+### 🤖 **NOVO: Inteligência Artificial (Gemini)**
+- **Conversação Natural**: Fale com o bot em linguagem natural
+- **Perguntas Inteligentes**: "Quanto tenho na conta X?", "Mostra meus saldos", "Qual meu saldo total?"
+- **Contexto Financeiro**: O bot entende seus dados e responde de forma contextualizada
+- **Sugestões Inteligentes**: Recomenda comandos quando apropriado
 
 ### 🎯 Comandos Disponíveis
 
 - **`/start`** - Mensagem de boas-vindas personalizada com lista de comandos
-- **`/help`** - Ajuda detalhada sobre todas as funcionalidades
+- **`/help`** - Ajuda detalhada sobre todas as funcionalidades (incluindo IA)
 - **`/saldo`** - Mostra saldos atualizados de todas as contas com total geral
 - **`/grafico [ano/mês]`** - Busca e envia gráficos da planilha para período específico
 - **`/status`** - Verifica a saúde do cache e quando foi a última atualização
 
 ### 💡 Características Principais
 
+- **IA Integrada**: Powered by Google Gemini AI
 - **Cache Inteligente**: Sistema de cache que mantém dados por 1 dia
 - **Parsing Robusto**: Converte valores monetários brasileiros automaticamente
 - **Busca de Gráficos**: Localiza e envia gráficos da planilha por período
@@ -28,6 +35,7 @@ Um assistente financeiro inteligente para Telegram que conecta diretamente com s
 - Docker e Docker Compose instalados
 - Conta Google Cloud com Google Sheets API habilitada
 - Bot do Telegram criado via @BotFather
+- **Chave da API do Google AI Studio (Gemini)** - [Obter aqui](https://aistudio.google.com/app/apikey)
 - Planilha Google Sheets com aba "Saldos" e gráficos
 
 ### 1. Configuração Inicial
@@ -69,6 +77,42 @@ docker-compose up -d --build
 # Para parar
 docker-compose down
 ```
+
+## 🤖 Como Usar a Inteligência Artificial
+
+### Conversação Natural
+
+Agora você pode conversar com o bot em linguagem natural! Aqui estão alguns exemplos:
+
+#### 💰 Perguntas sobre Saldos
+- "Quanto tenho na conta Nubank?"
+- "Mostra meus saldos"
+- "Qual meu saldo total?"
+- "Quanto dinheiro tenho disponível?"
+
+#### 📊 Perguntas sobre Gráficos
+- "Preciso de um gráfico de agosto"
+- "Mostra o gráfico de setembro de 2024"
+- "Quero ver os gráficos do mês passado"
+
+#### ❓ Perguntas Gerais
+- "Como você funciona?"
+- "Quais comandos você tem?"
+- "Me ajuda com finanças"
+
+### 💡 Dicas de Uso
+
+- **Seja específico**: "Quanto tenho no Nubank?" é melhor que "Quanto tenho?"
+- **Use nomes de contas**: O bot reconhece os nomes das suas contas
+- **Pergunte sobre períodos**: "Gráfico de agosto" funciona perfeitamente
+- **Comandos ainda funcionam**: `/saldo`, `/grafico`, etc. continuam disponíveis
+
+### 🔄 Fallback Inteligente
+
+Se a IA não conseguir responder algo específico, ela irá:
+- Sugerir comandos apropriados
+- Explicar suas limitações
+- Oferecer alternativas úteis
 
 ## 📊 Estrutura da Planilha
 

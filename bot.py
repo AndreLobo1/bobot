@@ -6,10 +6,11 @@ import re
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import requests
 from PIL import Image
 import io
+import google.generativeai as genai
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -27,6 +28,15 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 SPREADSHEET_NAME = os.getenv('SPREADSHEET_NAME')
 GOOGLE_CREDENTIALS_BASE64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+
+# Configurar Gemini AI
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    gemini_model = None
+    logger.warning("GEMINI_API_KEY não encontrado no .env! Funcionalidade de IA desabilitada.")
 
 cache = {
     "saldos_df": pd.DataFrame(),
@@ -81,6 +91,74 @@ def parse_valor_brl(valor_raw):
     except (ValueError, TypeError):
         logger.error(f"Não foi possível converter o valor '{valor_raw}' para float.")
         return 0.0
+
+async def processar_linguagem_natural(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Processa mensagens em linguagem natural usando Gemini AI."""
+    if not gemini_model:
+        await update.message.reply_text("🤖 Funcionalidade de IA não disponível. Use os comandos disponíveis.")
+        return
+    
+    user_message = update.message.text
+    logger.info(f"🧠 Processando linguagem natural: '{user_message}'")
+    
+    # Preparar contexto sobre a planilha
+    contexto_planilha = ""
+    if not cache["saldos_df"].empty:
+        saldos_info = []
+        total_geral = 0.0
+        for _, row in cache["saldos_df"].iterrows():
+            conta = row.get('CONTA', 'N/A')
+            saldo_raw = row.get('SALDO ATUAL (R$)', '0')
+            saldo_float = parse_valor_brl(saldo_raw)
+            total_geral += saldo_float
+            saldos_info.append(f"- {conta}: R$ {saldo_float:,.2f}")
+        
+        contexto_planilha = f"""
+DADOS ATUAIS DA PLANILHA FINANCEIRA:
+Saldo total geral: R$ {total_geral:,.2f}
+Contas disponíveis:
+{chr(10).join(saldos_info)}
+
+Última atualização: {cache["last_update"].strftime("%d/%m/%Y %H:%M:%S") if cache["last_update"] else "Nunca"}
+"""
+    
+    # Prompt para o Gemini
+    prompt = f"""Você é um assistente financeiro pessoal inteligente. Você tem acesso aos dados da planilha financeira do usuário.
+
+{contexto_planilha}
+
+COMANDOS DISPONÍVEIS:
+- /saldo - Mostra saldos de todas as contas
+- /grafico [ano/mês] - Busca gráfico para período específico (ex: /grafico 2025/08)
+- /status - Verifica saúde do cache
+- /help - Mostra ajuda
+
+INSTRUÇÕES:
+1. Responda de forma amigável e útil em português brasileiro
+2. Se o usuário perguntar sobre saldos, use os dados da planilha acima
+3. Se pedir gráfico, sugira usar o comando /grafico
+4. Se não souber algo específico, seja honesto e sugira comandos disponíveis
+5. Mantenha respostas concisas mas informativas
+6. Use emojis quando apropriado
+
+PERGUNTA DO USUÁRIO: {user_message}
+
+RESPOSTA:"""
+    
+    try:
+        response = gemini_model.generate_content(prompt)
+        resposta = response.text.strip()
+        
+        # Limitar tamanho da resposta para Telegram
+        if len(resposta) > 4000:
+            resposta = resposta[:4000] + "\n\n... (resposta truncada)"
+        
+        await update.message.reply_text(resposta)
+        logger.info("✅ Resposta do Gemini enviada com sucesso")
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao processar com Gemini: {e}")
+        await update.message.reply_text("🤖 Desculpe, ocorreu um erro ao processar sua mensagem. Tente usar os comandos disponíveis.")
 
 def parse_ano_mes(texto):
     """Extrai ano e mês do texto do usuário."""
@@ -559,7 +637,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Mostra a mensagem de ajuda."""
     help_message = (
         "ℹ️ <b>Ajuda do Assistente Financeiro</b>\n\n"
-        "Aqui estão os detalhes dos comandos disponíveis:\n\n"
+        "🤖 <b>NOVO: Inteligência Artificial!</b>\n"
+        "Agora você pode conversar comigo em linguagem natural! "
+        "Pergunte coisas como:\n"
+        "• \"Quanto tenho na conta X?\"\n"
+        "• \"Mostra meus saldos\"\n"
+        "• \"Qual meu saldo total?\"\n"
+        "• \"Preciso de um gráfico de agosto\"\n\n"
+        "📋 <b>Comandos Disponíveis:</b>\n\n"
         "▫️ <code>/saldo</code>\n"
         "Busca os saldos mais recentes de todas as suas contas diretamente da sua planilha Google Sheets. A resposta é quase instantânea graças a um sistema de cache inteligente.\n\n"
         "▫️ <code>/grafico [ano/mês]</code>\n"
@@ -573,7 +658,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "▫️ <code>/start</code>\n"
         "Exibe a mensagem inicial de boas-vindas.\n\n"
         "▫️ <code>/help</code>\n"
-        "Mostra esta mensagem."
+        "Mostra esta mensagem.\n\n"
+        "💡 <b>Dica:</b> Você pode usar tanto comandos quanto linguagem natural!"
     )
     await update.message.reply_text(help_message, parse_mode='HTML')
 
@@ -801,6 +887,9 @@ def main() -> None:
     application.add_handler(CommandHandler("saldo", saldo_command))
     application.add_handler(CommandHandler("grafico", grafico_command))
     application.add_handler(CommandHandler("status", status_command))
+    
+    # Handler para mensagens em linguagem natural (deve ser o último)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, processar_linguagem_natural))
 
     logger.info("Bot iniciado no modo Polling... Pressione Ctrl+C para parar.")
     application.run_polling()
