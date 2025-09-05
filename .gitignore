@@ -8,3 +8,6 @@ venv/
 # Cache e arquivos compilados do Python
 __pycache__/
 *.pyc
+
+# Arquivo encoded temporário
+encoded-*.txt

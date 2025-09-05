@@ -1,248 +1,132 @@
-# 🤖 Bot Financeiro Pessoal
+# 🤖 Bot Financeiro Pessoal com IA
 
-Um assistente financeiro inteligente para Telegram que conecta diretamente com sua planilha Google Sheets para fornecer informações rápidas sobre saldos, transações e gráficos financeiros. **Agora com Inteligência Artificial integrada!**
+**Atividade Ponderada - Programação | Semana 5 | Módulo 7 | Engenharia de Software | Inteli**
 
-## 📋 Funcionalidades
+## 📋 Enunciado da Atividade
 
-### 🤖 **NOVO: Inteligência Artificial (Gemini)**
-- **Conversação Natural**: Fale com o bot em linguagem natural
-- **Perguntas Inteligentes**: "Quanto tenho na conta X?", "Mostra meus saldos", "Qual meu saldo total?"
-- **Contexto Financeiro**: O bot entende seus dados e responde de forma contextualizada
-- **Sugestões Inteligentes**: Recomenda comandos quando apropriado
+Esta atividade consistiu na implementação de um chatbot inteligente integrado à API do Telegram, seguindo os seguintes requisitos:
 
-### 🎯 Comandos Disponíveis
+### ✅ Requisitos Implementados
 
-- **`/start`** - Mensagem de boas-vindas personalizada com lista de comandos
-- **`/help`** - Ajuda detalhada sobre todas as funcionalidades (incluindo IA)
-- **`/saldo`** - Mostra saldos atualizados de todas as contas com total geral
-- **`/grafico [ano/mês]`** - Busca e envia gráficos da planilha para período específico
-- **`/status`** - Verifica a saúde do cache e quando foi a última atualização
+- **Integração à API do Telegram** - Bot funcional conectado ao Telegram
+- **Vídeo de até 5 minutos** - Apresentação completa do chatbot
+- **4 perguntas diferentes com 4 respostas distintas** - Demonstração de funcionalidades variadas
+- **Memória de curto prazo** - Implementação de contexto conversacional onde uma pergunta realizada após outra pergunta provoca uma resposta diferente do chatbot (pergunta dependente de contexto)
 
-### 💡 Características Principais
+### 🎬 Vídeo de Apresentação
 
-- **IA Integrada**: Powered by Google Gemini AI
-- **Cache Inteligente**: Sistema de cache que mantém dados por 1 dia
-- **Parsing Robusto**: Converte valores monetários brasileiros automaticamente
-- **Busca de Gráficos**: Localiza e envia gráficos da planilha por período
-- **Formatação HTML**: Mensagens bem formatadas e legíveis
-- **Logs Detalhados**: Sistema de logging para monitoramento
-- **Tratamento de Erros**: Respostas amigáveis para problemas de conexão
+**Assista ao vídeo completo da demonstração:**
+[📹 Vídeo da Atividade - Bot Financeiro com IA](https://drive.google.com/file/d/1G0o-4t00H-KcGfeN_SxYs0LMkMiOODvd/view?usp=sharing)
 
-## 🚀 Como Executar
+## 🎯 Sobre o Projeto
 
-### Pré-requisitos
+Um assistente financeiro inteligente para Telegram que conecta diretamente com sua planilha Google Sheets para fornecer informações rápidas sobre saldos, transações e gráficos financeiros. **Agora com Inteligência Artificial integrada e memória de curto prazo!**
+
+### 📊 **Configuração da Planilha**
+
+**As instruções para criar a planilha e configurar tudo necessário para o bot ter acesso estão disponíveis neste repositório:**
+[📋 Repositório de Configuração da Planilha](https://github.com/AndreLobo1/AQUI/tree/main)
+
+Siga o passo a passo completo do repositório acima para gerar uma planilha idêntica à nossa e configurar todas as credenciais necessárias.
+
+## 🚀 Configuração e Instalação
+
+### 📋 Pré-requisitos
 
 - Docker e Docker Compose instalados
 - Conta Google Cloud com Google Sheets API habilitada
 - Bot do Telegram criado via @BotFather
 - **Chave da API do Google AI Studio (Gemini)** - [Obter aqui](https://aistudio.google.com/app/apikey)
-- Planilha Google Sheets com aba "Saldos" e gráficos
+- Planilha Google Sheets com aba "Saldos" e "Transações"
 
-### 1. Configuração Inicial
+### 🔧 Como Obter as Credenciais
 
-Clone o repositório e configure as variáveis de ambiente:
+#### 1. **Token do Telegram Bot**
+1. Abra o Telegram e procure por `@BotFather`
+2. Envie `/newbot` e siga as instruções
+3. Copie o token fornecido
 
-```bash
-git clone <seu-repositorio>
-cd bobot
-```
+#### 2. **Chave da API do Gemini**
+1. Acesse [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Faça login com sua conta Google
+3. Clique em "Create API Key"
+4. Copie a chave gerada
 
-### 2. Configurar Variáveis de Ambiente
+#### 3. **Credenciais do Google Sheets**
+1. Acesse [Google Cloud Console](https://console.cloud.google.com/)
+2. Crie um novo projeto ou selecione um existente
+3. Ative as APIs:
+   - Google Sheets API
+   - Google Drive API
+4. Vá em "Credenciais" → "Criar credenciais" → "Conta de serviço"
+5. Baixe o arquivo JSON da conta de serviço
+6. **Converter para Base64:**
+   ```bash
+   # No terminal (macOS/Linux)
+   base64 -i caminho/para/seu/arquivo.json
+   
+   # No Windows (PowerShell)
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes("caminho/para/seu/arquivo.json"))
+   ```
 
-Crie o arquivo `.env` com as seguintes variáveis:
+### 📁 Configuração do Projeto
 
-```env
-# Token do seu bot, obtido com o @BotFather
-TELEGRAM_TOKEN=seu_token_aqui
+1. **Clone o repositório:**
+   ```bash
+   git clone <seu-repositorio>
+   cd bobot
+   ```
 
-# Chave da API do Google AI Studio para o Gemini
-GEMINI_API_KEY=sua_chave_aqui
+2. **Configure o arquivo `.env`:**
+   ```env
+   # Token do seu bot, obtido com o @BotFather
+   TELEGRAM_TOKEN=seu_token_aqui
+   
+   # Chave da API do Google AI Studio para o Gemini
+   GEMINI_API_KEY=sua_chave_aqui
+   
+   # Nome exato da sua planilha no Google Sheets
+   SPREADSHEET_NAME=Carteira
+   
+   # O conteúdo Base64 do seu arquivo .json de credenciais do Google
+   GOOGLE_CREDENTIALS_BASE64=seu_base64_aqui
+   ```
 
-# Nome exato da sua planilha no Google Sheets
-SPREADSHEET_NAME=Carteira
+3. **Execute com Docker:**
+   ```bash
+   # Construir e executar o container
+   docker-compose up --build
+   
+   # Para executar em background
+   docker-compose up -d --build
+   
+   # Para parar
+   docker-compose down
+   ```
 
-# O conteúdo Base64 do seu arquivo .json de credenciais do Google
-GOOGLE_CREDENTIALS_BASE64=seu_base64_aqui
-```
+## 🎯 Funcionalidades Demonstradas
 
-### 3. Executar com Docker
+### 🤖 **Inteligência Artificial (Gemini)**
+- **Conversação Natural**: Fale com o bot em linguagem natural
+- **Perguntas Inteligentes**: "Quanto tenho na conta X?", "Mostra meus saldos", "Qual meu saldo total?"
+- **Contexto Financeiro**: O bot entende seus dados e responde de forma contextualizada
+- **Memória de Curto Prazo**: Lembra do contexto da conversa anterior
 
-```bash
-# Construir e executar o container
-docker-compose up --build
+### 🎯 **Comandos Disponíveis**
+- **`/start`** - Mensagem de boas-vindas personalizada
+- **`/help`** - Ajuda detalhada sobre todas as funcionalidades
+- **`/saldo`** - Mostra saldos atualizados de todas as contas
+- **`/grafico [ano/mês]`** - Busca e envia gráficos da planilha
+- **`/status`** - Verifica a saúde do cache
 
-# Para executar em background
-docker-compose up -d --build
-
-# Para parar
-docker-compose down
-```
-
-## 🤖 Como Usar a Inteligência Artificial
-
-### Conversação Natural
-
-Agora você pode conversar com o bot em linguagem natural! Aqui estão alguns exemplos:
-
-#### 💰 Perguntas sobre Saldos
-- "Quanto tenho na conta Nubank?"
-- "Mostra meus saldos"
-- "Qual meu saldo total?"
-- "Quanto dinheiro tenho disponível?"
-
-#### 📊 Perguntas sobre Gráficos
-- "Preciso de um gráfico de agosto"
-- "Mostra o gráfico de setembro de 2024"
-- "Quero ver os gráficos do mês passado"
-
-#### ❓ Perguntas Gerais
-- "Como você funciona?"
-- "Quais comandos você tem?"
-- "Me ajuda com finanças"
-
-### 💡 Dicas de Uso
-
-- **Seja específico**: "Quanto tenho no Nubank?" é melhor que "Quanto tenho?"
-- **Use nomes de contas**: O bot reconhece os nomes das suas contas
-- **Pergunte sobre períodos**: "Gráfico de agosto" funciona perfeitamente
-- **Comandos ainda funcionam**: `/saldo`, `/grafico`, etc. continuam disponíveis
-
-### 🔄 Fallback Inteligente
-
-Se a IA não conseguir responder algo específico, ela irá:
-- Sugerir comandos apropriados
-- Explicar suas limitações
-- Oferecer alternativas úteis
-
-## 📊 Estrutura da Planilha
-
-### Aba "Saldos"
-
-A planilha deve ter uma aba chamada "Saldos" com as seguintes colunas:
-
-| Coluna | Descrição | Exemplo |
-|--------|-----------|---------|
-| `CONTA` | Nome da conta bancária | "Nubank", "Itaú" |
-| `SALDO ATUAL (R$)` | Saldo atual da conta | "R$ 1.234,56" |
-
-### Gráficos
-
-Para o comando `/grafico` funcionar, sua planilha deve conter gráficos que podem ser:
-
-- **Gráficos em abas específicas**: Abas nomeadas com padrões como "2024-09", "09/2024", etc.
-- **Gráficos em qualquer aba**: Com títulos que contenham o ano/mês
-- **Gráficos em células**: Localizados próximos a células com datas
-
-### Exemplo de Dados
-
-```
-CONTA          | SALDO ATUAL (R$)
----------------|------------------
-Nubank         | R$ 2.500,00
-Itaú           | R$ 1.750,50
-Caixa          | R$ 3.200,75
-```
-
-## 🔧 Como Funciona
-
-### Arquitetura do Sistema
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Telegram      │    │   Bot Python    │    │  Google Sheets  │
-│   (Usuário)     │◄──►│   (Docker)      │◄──►│   (Planilha)    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌─────────────────┐
-                       │   Cache Local   │
-                       │   (1 dia)       │
-                       └─────────────────┘
-```
-
-### Sistema de Cache
-
-O bot utiliza um sistema de cache inteligente para otimizar performance:
-
-- **Duração**: Cache válido por 1 dia
-- **Atualização**: Automática quando necessário
-- **Fallback**: Busca dados da planilha se cache estiver vazio
-- **Timestamp**: Mostra quando foi a última atualização
-
-### Busca de Gráficos
-
-O comando `/grafico` utiliza múltiplas estratégias para encontrar gráficos:
-
-1. **Busca em Todas as Abas**: Procura por gráficos em todas as abas da planilha
-2. **Busca em Aba Específica**: Procura por abas com nomes como "2024-09", "09/2024"
-3. **Busca em Células**: Procura por gráficos próximos a células com datas
-
-### Fluxo de Funcionamento
-
-1. **Inicialização**: Bot inicia e conecta ao Telegram
-2. **Primeira Requisição**: Usuário envia `/saldo` ou `/grafico`
-3. **Verificação de Cache**: Bot verifica se tem dados em cache (apenas para saldos)
-4. **Busca de Dados**: Se necessário, busca da planilha Google Sheets
-5. **Processamento**: Converte valores monetários brasileiros ou localiza gráficos
-6. **Resposta**: Envia mensagem formatada ou imagem do gráfico
-
-## 🛠️ Desenvolvimento
-
-### Estrutura do Projeto
-
-```
-bobot/
-├── bot.py              # Código principal do bot
-├── requirements.txt    # Dependências Python
-├── Dockerfile          # Configuração Docker
-├── docker-compose.yml  # Orquestração Docker
-├── .env                # Variáveis de ambiente
-├── .gitignore          # Arquivos ignorados pelo Git
-├── env.example         # Exemplo de variáveis de ambiente
-└── README.md           # Esta documentação
-```
-
-### Dependências Principais
-
-- `python-telegram-bot[job-queue]` - Framework do bot Telegram
-- `python-dotenv` - Gerenciamento de variáveis de ambiente
-- `gspread` - Integração com Google Sheets
-- `oauth2client` - Autenticação Google
-- `pandas` - Manipulação de dados
-- `Pillow` - Processamento de imagens
-- `requests` - Requisições HTTP
-
-### Funções Principais
-
-#### `get_google_sheets_client()`
-- Decodifica credenciais Base64
-- Configura autenticação OAuth2
-- Retorna cliente autorizado do Google Sheets
-
-#### `update_cache(context)`
-- Busca dados da planilha
-- Atualiza cache local
-- Registra timestamp da atualização
-
-#### `parse_valor_brl(valor_raw)`
-- Converte valores monetários brasileiros
-- Remove "R$", pontos e vírgulas
-- Retorna float para cálculos
-
-#### `parse_ano_mes(texto)`
-- Extrai ano e mês do texto do usuário
-- Suporta múltiplos formatos (2024/09, setembro 2024, etc.)
-- Valida entrada do usuário
-
-#### `buscar_grafico_planilha(ano, mes)`
-- Coordena a busca de gráficos
-- Utiliza múltiplas estratégias de busca
-- Retorna imagem do gráfico ou mensagem de erro
+### 🧠 **Memória Contextual**
+- **Detecção de Perguntas Dependentes**: Identifica quando "quanto foi?" se refere ao contexto anterior
+- **Respostas Contextuais**: Diferentes respostas baseadas na pergunta anterior
+- **Limpeza Inteligente**: Limpa memória quando muda de tópico/período
 
 ## 🧪 Como Testar
 
-### 1. Teste Local
-
+### 1. **Teste Local**
 ```bash
 # Executar bot localmente
 docker-compose up --build
@@ -251,200 +135,38 @@ docker-compose up --build
 docker-compose logs -f
 ```
 
-### 2. Teste no Telegram
+### 2. **Teste da Memória Contextual**
 
-1. Abra o Telegram
-2. Procure seu bot pelo username
-3. Envie `/start` para iniciar
-4. Teste os comandos:
-   - `/help` - Ver ajuda
-   - `/saldo` - Ver saldos
-   - `/grafico 2024/09` - Buscar gráfico
-   - `/status` - Ver status do cache
+#### **Sequência 1: Contexto "Maior Gasto"**
+1. Pergunte: "qual foi meu maior gasto?"
+2. Bot responde: "Blablacar com R$ 150,00"
+3. Pergunte: "quanto foi?"
+4. Bot responde: "💰 R$ 150,00"
 
-### 3. Verificar Funcionamento
+#### **Sequência 2: Contexto "Categoria que Gastou Mais"**
+1. Pergunte: "com qual categoria gastei mais em agosto?"
+2. Bot responde: "Blablacar"
+3. Pergunte: "quanto foi?"
+4. Bot responde: "💰 O total gasto com blablacar em agosto foi R$ 427,90"
 
-**Resposta esperada do `/saldo`:**
-```
-💰 SALDOS DAS CONTAS
+**Mesma pergunta "quanto foi?" mas respostas diferentes!**
 
-🏦 Nubank: R$ 2.500,00
-🏦 Itaú: R$ 1.750,50
-🏦 Caixa: R$ 3.200,75
-
-📊 TOTAL GERAL: R$ 7.451,25
-
-🔄 Cache de 04/09/2024 14:30:15
-```
-
-**Resposta esperada do `/grafico 2024/09`:**
-```
-🔍 Buscando gráfico para: 2024/09
-Isso pode levar alguns segundos...
-
-📊 Gráfico 09/2024
-
-Gráfico encontrado na aba '2024-09'
-```
-
-## 📊 Comando Gráfico
-
-### Como Usar
-
-O comando `/grafico` permite buscar gráficos da sua planilha por período:
-
+### 3. **Verificar Logs da Memória**
 ```bash
-/grafico 2024/09          # Setembro de 2024
-/grafico setembro 2024     # Setembro de 2024
-/grafico 09/2024           # Setembro de 2024
-/grafico 2024-09           # Setembro de 2024
+# Ver logs específicos de memória
+docker-compose logs --tail=20 | grep -E "(🧠|memória|dependente)"
+
+# Ver logs de debug
+docker-compose logs --tail=30 | grep -E "(DEBUG|Filtrando)"
 ```
 
-### Formatos Aceitos
+## 🎓 Conclusão da Atividade
 
-- **Numérico**: `2024/09`, `09/2024`, `2024-09`, `09-2024`
-- **Texto**: `setembro 2024`, `set 2024`, `dezembro 2024`
-- **Misto**: `2024 09`, `09 2024`
+Este projeto demonstra com sucesso a implementação de um chatbot inteligente que atende todos os requisitos da atividade:
 
-### Estratégias de Busca
+✅ **Integração à API do Telegram** - Bot funcional e responsivo  
+✅ **Vídeo de apresentação** - Demonstração completa das funcionalidades  
+✅ **4 perguntas diferentes com 4 respostas distintas** - Variedade de funcionalidades  
+✅ **Memória de curto prazo** - Contexto conversacional implementado com sucesso  
 
-1. **Busca por Título**: Procura gráficos com ano/mês no título
-2. **Busca por Aba**: Procura abas nomeadas com o período
-3. **Busca por Célula**: Procura gráficos próximos a células com datas
-
-### Dicas para Gráficos
-
-- **Nomeie suas abas** com padrões como "2024-09" ou "09/2024"
-- **Use títulos descritivos** nos gráficos incluindo o período
-- **Mantenha os gráficos visíveis** (não ocultos)
-- **Teste diferentes formatos** de data
-
-## 🔍 Troubleshooting
-
-### Problemas Comuns
-
-#### 1. "Cache vazio" ou "Não foi possível buscar os dados"
-
-**Causa**: Problemas de autenticação ou configuração
-**Solução**: 
-- Verificar se `GOOGLE_CREDENTIALS_BASE64` está no `.env`
-- Confirmar se a planilha tem permissão para o service account
-- Verificar se o nome da planilha está correto
-
-#### 2. "Colunas esperadas não encontradas"
-
-**Causa**: Estrutura da planilha diferente do esperado
-**Solução**:
-- Verificar se a aba se chama "Saldos"
-- Confirmar se as colunas são "CONTA" e "SALDO ATUAL (R$)"
-- Verificar se não há espaços extras nos nomes
-
-#### 3. "Gráfico não encontrado"
-
-**Causa**: Gráfico não existe ou não está acessível
-**Solução**:
-- Verificar se existe gráfico para o período solicitado
-- Confirmar se o gráfico está visível (não oculto)
-- Tentar diferentes formatos de data
-- Verificar se a planilha tem permissões adequadas
-
-#### 4. Bot não responde
-
-**Causa**: Problemas de conexão ou token inválido
-**Solução**:
-- Verificar se `TELEGRAM_TOKEN` está correto
-- Confirmar se o bot não foi bloqueado
-- Verificar logs do Docker
-
-### Logs Úteis
-
-```bash
-# Ver logs em tempo real
-docker-compose logs -f
-
-# Ver logs específicos do bot
-docker-compose logs bot
-
-# Ver logs de erro
-docker-compose logs bot | grep ERROR
-
-# Ver logs de gráfico
-docker-compose logs bot | grep -i grafico
-```
-
-## 🔐 Segurança
-
-### Boas Práticas
-
-- **Nunca commite** o arquivo `.env` no Git
-- **Use service account** do Google Cloud (não credenciais pessoais)
-- **Restrinja permissões** do service account apenas ao necessário
-- **Monitore logs** regularmente para detectar problemas
-
-### Variáveis Sensíveis
-
-- `TELEGRAM_TOKEN` - Token do bot (não compartilhe)
-- `GOOGLE_CREDENTIALS_BASE64` - Credenciais do Google (não compartilhe)
-- `GEMINI_API_KEY` - Chave da API do Gemini (não compartilhe)
-
-## 📈 Monitoramento
-
-### Métricas Importantes
-
-- **Tempo de resposta** do comando `/saldo`
-- **Taxa de sucesso** das atualizações de cache
-- **Taxa de sucesso** da busca de gráficos
-- **Erros de autenticação** com Google Sheets
-- **Uso de memória** do container Docker
-
-### Logs de Monitoramento
-
-O bot gera logs detalhados para monitoramento:
-
-```
-2024-09-04 14:30:15 - __main__ - INFO - 🔄 Atualizando cache...
-2024-09-04 14:30:16 - __main__ - INFO - ✅ Cache de saldos atualizado: 3 registros.
-2024-09-04 14:30:17 - __main__ - INFO - 🔍 Buscando gráfico para: 2024/09
-2024-09-04 14:30:18 - __main__ - INFO - 📊 Gráfico encontrado na aba '2024-09'
-2024-09-04 14:30:19 - __main__ - INFO - Bot iniciado no modo Polling...
-```
-
-## 🤝 Contribuição
-
-### Como Contribuir
-
-1. Fork o projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/nova-funcionalidade`)
-3. Commit suas mudanças (`git commit -am 'Adiciona nova funcionalidade'`)
-4. Push para a branch (`git push origin feature/nova-funcionalidade`)
-5. Abra um Pull Request
-
-### Padrões de Código
-
-- Use docstrings para documentar funções
-- Mantenha logs informativos
-- Trate erros adequadamente
-- Teste suas mudanças antes de commitar
-
-## 📄 Licença
-
-Este projeto está sob a licença MIT. Veja o arquivo LICENSE para mais detalhes.
-
-## 🆘 Suporte
-
-### Onde Obter Ajuda
-
-- **Issues do GitHub**: Para bugs e problemas
-- **Documentação**: Este README e comentários no código
-- **Logs**: Sempre verifique os logs primeiro
-
-### Informações Úteis
-
-- **Versão do Bot**: 1.1.0
-- **Python**: 3.11
-- **Docker**: Última versão estável
-- **Telegram Bot API**: v6.0+
-
----
-
-**Desenvolvido com ❤️ para facilitar o controle financeiro pessoal**
+A implementação da memória de curto prazo permite que o bot mantenha contexto entre perguntas, respondendo de forma inteligente e contextualizada, demonstrando uma evolução significativa em relação a chatbots tradicionais.

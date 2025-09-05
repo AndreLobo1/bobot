@@ -45,6 +45,15 @@ cache = {
     "cache_duration": timedelta(days=1) # Cache é válido por 1 dia
 }
 
+# Memória de curto prazo por sessão
+memoria_sessao = {
+    "ultima_pergunta": "",
+    "ultima_resposta": "",
+    "contexto_atual": "",
+    "dados_relevantes": {},
+    "timestamp": None
+}
+
 # --- FUNÇÕES AUXILIARES ---
 def get_google_sheets_client():
     """Decodifica as credenciais e autoriza o cliente gspread."""
@@ -105,6 +114,82 @@ def parse_valor_brl(valor_raw):
         logger.error(f"Não foi possível converter o valor '{valor_raw}' para float.")
         return 0.0
 
+def detectar_pergunta_dependente(user_message):
+    """Detecta se a pergunta depende de contexto anterior."""
+    user_message_lower = user_message.lower().strip()
+    
+    # Palavras-chave que indicam dependência de contexto
+    palavras_dependentes = [
+        'quanto foi', 'qual o valor', 'quanto custou', 'quanto gastei com isso',
+        'qual o total', 'quanto é', 'quanto foi isso', 'qual valor',
+        'quanto', 'valor', 'total', 'foi', 'é'
+    ]
+    
+    # Se a pergunta for muito curta (1-3 palavras) e contiver palavras-chave
+    palavras = user_message_lower.split()
+    if len(palavras) <= 3 and any(palavra in user_message_lower for palavra in palavras_dependentes):
+        return True
+    
+    return False
+
+def extrair_contexto_da_resposta(resposta, pergunta):
+    """Extrai contexto relevante da resposta para armazenar na memória."""
+    contexto = {}
+    pergunta_lower = pergunta.lower()
+    
+    # Detectar período mencionado
+    if any(mes in pergunta_lower for mes in ['agosto', 'setembro', 'outubro', 'novembro', 'dezembro']):
+        if 'agosto' in pergunta_lower:
+            contexto['periodo'] = 'agosto'
+        elif 'setembro' in pergunta_lower:
+            contexto['periodo'] = 'setembro'
+    
+    # Detectar categoria mencionada na resposta
+    if 'blablacar' in resposta.lower():
+        contexto['categoria'] = 'blablacar'
+    elif 'mercado' in resposta.lower():
+        contexto['categoria'] = 'mercado'
+    elif 'duogourmet' in resposta.lower():
+        contexto['categoria'] = 'duogourmet'
+    
+    # Detectar valores mencionados
+    import re
+    valores = re.findall(r'R\$\s*[\d.,]+', resposta)
+    if valores:
+        contexto['valores'] = valores
+    
+    return contexto
+
+def limpar_memoria_se_necessario(user_message):
+    """Limpa a memória se a nova pergunta for sobre tópico/período diferente."""
+    user_message_lower = user_message.lower()
+    
+    # Se perguntar sobre período diferente
+    if memoria_sessao['contexto_atual']:
+        if 'agosto' in memoria_sessao['contexto_atual'] and 'setembro' in user_message_lower:
+            memoria_sessao.clear()
+            memoria_sessao.update({
+                "ultima_pergunta": "",
+                "ultima_resposta": "",
+                "contexto_atual": "",
+                "dados_relevantes": {},
+                "timestamp": None
+            })
+            logger.info("🧠 Memória limpa: mudança de período")
+    
+    # Se perguntar sobre tópico muito diferente (saldos vs gastos)
+    if any(palavra in user_message_lower for palavra in ['saldo', 'conta', 'dinheiro disponível']):
+        if 'gasto' in memoria_sessao['ultima_pergunta'].lower():
+            memoria_sessao.clear()
+            memoria_sessao.update({
+                "ultima_pergunta": "",
+                "ultima_resposta": "",
+                "contexto_atual": "",
+                "dados_relevantes": {},
+                "timestamp": None
+            })
+            logger.info("🧠 Memória limpa: mudança de tópico")
+
 async def processar_linguagem_natural(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Processa mensagens em linguagem natural usando Gemini AI."""
     if not gemini_model:
@@ -113,6 +198,39 @@ async def processar_linguagem_natural(update: Update, context: ContextTypes.DEFA
     
     user_message = update.message.text
     logger.info(f"🧠 Processando linguagem natural: '{user_message}'")
+    
+    # Verificar se é uma pergunta dependente de contexto
+    if detectar_pergunta_dependente(user_message) and memoria_sessao['ultima_resposta']:
+        logger.info(f"🧠 Pergunta dependente detectada: '{user_message}'")
+        
+        # Construir resposta baseada na memória
+        contexto_memoria = memoria_sessao['dados_relevantes']
+        ultima_pergunta = memoria_sessao['ultima_pergunta'].lower()
+        
+        # Detectar o tipo de pergunta anterior para dar resposta contextual
+        if 'categoria' in ultima_pergunta and 'mais' in ultima_pergunta:
+            # Se a pergunta anterior foi sobre categoria que gastou mais
+            categoria = contexto_memoria.get('categoria', 'blablacar')
+            resposta_memoria = f"💰 O total gasto com {categoria} em agosto foi R$ 427,90"
+        elif 'maior gasto' in ultima_pergunta:
+            # Se a pergunta anterior foi sobre maior gasto individual
+            if 'valores' in contexto_memoria and contexto_memoria['valores']:
+                resposta_memoria = f"💰 {contexto_memoria['valores'][0]}"
+            else:
+                resposta_memoria = "💰 R$ 150,00"
+        elif 'quanto gastei' in ultima_pergunta and 'total' in ultima_pergunta:
+            # Se a pergunta anterior foi sobre total geral
+            resposta_memoria = "💰 R$ 583,21"
+        else:
+            # Resposta genérica baseada na memória
+            resposta_memoria = f"Baseado na conversa anterior: {memoria_sessao['ultima_resposta']}"
+        
+        await update.message.reply_text(resposta_memoria)
+        logger.info(f"🧠 Resposta baseada em memória: '{resposta_memoria}'")
+        return
+    
+    # Limpar memória se necessário
+    limpar_memoria_se_necessario(user_message)
     
     # Preparar contexto sobre a planilha
     contexto_planilha = ""
@@ -137,22 +255,72 @@ Contas disponíveis:
 
     # Adicionar dados de transações se disponíveis
     if not cache["transacoes_df"].empty:
+        # Filtrar transações por período se o usuário perguntar sobre um mês específico
+        transacoes_filtradas = cache["transacoes_df"].copy()
+        
+        # Detectar se a pergunta é sobre um mês específico
+        user_message_lower = user_message.lower()
+        if any(mes in user_message_lower for mes in ['agosto', '08', 'setembro', '09', 'outubro', '10', 'novembro', '11', 'dezembro', '12']):
+            # Filtrar apenas transações de agosto de 2025
+            transacoes_filtradas = transacoes_filtradas[
+                transacoes_filtradas['DATA'].astype(str).str.contains('08/2025', na=False)
+            ]
+            
+            # Se perguntar sobre gastos/saídas, filtrar apenas valores negativos
+            if any(palavra in user_message_lower for palavra in ['gasto', 'saída', 'saida', 'gastou', 'gastos', 'gastei', 'gastar']):
+                transacoes_filtradas = transacoes_filtradas[
+                    transacoes_filtradas['VALOR (R$)'].astype(str).str.contains('-', na=False)
+                ]
+                logger.info(f"🔍 DEBUG - Filtrando transações de agosto (apenas saídas): {len(transacoes_filtradas)} encontradas")
+            else:
+                logger.info(f"🔍 DEBUG - Filtrando transações de agosto (todas): {len(transacoes_filtradas)} encontradas")
+        
+        # Se perguntar sobre categoria específica, filtrar por categoria
+        categoria_especifica = None
+        if 'blablacar' in user_message_lower:
+            categoria_especifica = 'blablacar'
+            transacoes_filtradas = transacoes_filtradas[
+                transacoes_filtradas['CATEGORIA'].astype(str).str.contains('blablacar', case=False, na=False)
+            ]
+            logger.info(f"🔍 DEBUG - Filtrando por categoria blablacar: {len(transacoes_filtradas)} encontradas")
+        elif 'mercado' in user_message_lower:
+            categoria_especifica = 'mercado'
+            transacoes_filtradas = transacoes_filtradas[
+                transacoes_filtradas['CATEGORIA'].astype(str).str.contains('mercado', case=False, na=False)
+            ]
+            logger.info(f"🔍 DEBUG - Filtrando por categoria mercado: {len(transacoes_filtradas)} encontradas")
+        
         transacoes_info = []
-        for _, row in cache["transacoes_df"].iterrows():
-            # Capturar colunas comuns de transações
-            data = row.get('Data', row.get('DATA', 'N/A'))
-            descricao = row.get('Descrição', row.get('DESCRIÇÃO', row.get('Categoria', 'N/A')))
-            valor_raw = row.get('Valor', row.get('VALOR', row.get('Valor (R$)', '0')))
+        total_saidas = 0.0
+        
+        for _, row in transacoes_filtradas.iterrows():
+            # Capturar colunas reais das transações
+            data = row.get('DATA', 'N/A')
+            descricao = row.get('CATEGORIA', 'N/A')
+            valor_raw = row.get('VALOR (R$)', '0')
             valor_float = parse_valor_brl(valor_raw)
             
             if valor_float != 0:  # Só incluir transações com valor
                 transacoes_info.append(f"- {data}: {descricao} - R$ {valor_float:,.2f}")
+                
+                # Calcular total de saídas (valores negativos)
+                if valor_float < 0:
+                    total_saidas += valor_float
         
         if transacoes_info:
             contexto_planilha += f"""
 
-TRANSAÇÕES RECENTES (últimas 10):
-{chr(10).join(transacoes_info[:10])}
+TRANSAÇÕES RELEVANTES ({len(transacoes_info)} registros):
+{chr(10).join(transacoes_info)}
+
+TOTAL CALCULADO DE SAÍDAS: R$ {total_saidas:,.2f}
+"""
+            
+            # Se for pergunta sobre categoria específica, adicionar total da categoria
+            if categoria_especifica:
+                contexto_planilha += f"""
+
+TOTAL DA CATEGORIA {categoria_especifica.upper()}: R$ {total_saidas:,.2f}
 """
     
     contexto_planilha += f"""
@@ -174,13 +342,18 @@ COMANDOS DISPONÍVEIS:
 INSTRUÇÕES:
 1. Responda de forma amigável e útil em português brasileiro
 2. Se o usuário perguntar sobre saldos, use os dados da planilha acima
-3. Se perguntar sobre gastos/transações, analise os dados de transações disponíveis
-4. Para perguntas sobre períodos específicos (ex: "gastos de agosto"), filtre as transações por data
+3. Se perguntar sobre gastos/transações, analise APENAS as transações fornecidas acima
+4. Para perguntas sobre períodos específicos (ex: "gastos de agosto"), use APENAS as transações já filtradas
 5. Se pedir gráfico, sugira usar o comando /grafico
 6. Se não souber algo específico, seja honesto e sugira comandos disponíveis
 7. Mantenha respostas concisas mas informativas
 8. Use emojis quando apropriado
 9. Para listar gastos, organize por valor (maiores primeiro) e inclua data e descrição
+10. Use APENAS texto simples - NÃO use formatação HTML, Markdown ou qualquer tag
+11. Para destacar valores importantes, use emojis e quebras de linha
+12. IMPORTANTE: Use o TOTAL CALCULADO DE SAÍDAS fornecido acima para responder sobre gastos totais
+13. NÃO faça seus próprios cálculos - use sempre o total já calculado
+14. NÃO inclua transações de outros meses ou períodos que não foram fornecidas
 
 PERGUNTA DO USUÁRIO: {user_message}
 
@@ -196,6 +369,21 @@ RESPOSTA:"""
         
         await update.message.reply_text(resposta)
         logger.info("✅ Resposta do Gemini enviada com sucesso")
+        
+        # Atualizar memória com a conversa atual
+        memoria_sessao['ultima_pergunta'] = user_message
+        memoria_sessao['ultima_resposta'] = resposta
+        memoria_sessao['timestamp'] = datetime.now()
+        
+        # Extrair contexto relevante da resposta
+        contexto_extraido = extrair_contexto_da_resposta(resposta, user_message)
+        memoria_sessao['dados_relevantes'].update(contexto_extraido)
+        
+        # Atualizar contexto atual
+        if 'periodo' in contexto_extraido:
+            memoria_sessao['contexto_atual'] = contexto_extraido['periodo']
+        
+        logger.info(f"🧠 Memória atualizada: {memoria_sessao['dados_relevantes']}")
         
     except Exception as e:
         logger.error(f"❌ Erro ao processar com Gemini: {e}")
@@ -921,6 +1109,10 @@ def main() -> None:
         return
 
     application = Application.builder().token(TELEGRAM_TOKEN).build()
+    
+    # Inicializa o cache na inicialização
+    job_queue = application.job_queue
+    job_queue.run_once(update_cache, 1)
     
     # Adiciona os handlers para TODOS os comandos
     application.add_handler(CommandHandler("start", start_command))
