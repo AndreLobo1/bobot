@@ -73,10 +73,23 @@ async def update_cache(context: ContextTypes.DEFAULT_TYPE):
 
     try:
         spreadsheet = gc.open(SPREADSHEET_NAME)
+        
+        # Atualizar saldos
         saldos_ws = spreadsheet.worksheet("Saldos")
         saldos_records = saldos_ws.get_all_records(value_render_option='FORMULA')
         cache["saldos_df"] = pd.DataFrame(saldos_records)
         logger.info(f"✅ Cache de saldos atualizado: {len(saldos_records)} registros.")
+        
+        # Atualizar transações
+        try:
+            transacoes_ws = spreadsheet.worksheet("Transações")
+            transacoes_records = transacoes_ws.get_all_records(value_render_option='FORMULA')
+            cache["transacoes_df"] = pd.DataFrame(transacoes_records)
+            logger.info(f"✅ Cache de transações atualizado: {len(transacoes_records)} registros.")
+        except Exception as e:
+            logger.warning(f"⚠️ Não foi possível carregar aba 'Transações': {e}")
+            cache["transacoes_df"] = pd.DataFrame()
+        
         cache["last_update"] = datetime.now()
     except Exception as e:
         logger.error(f"Erro geral ao atualizar cache: {e}", exc_info=True)
@@ -115,9 +128,34 @@ async def processar_linguagem_natural(update: Update, context: ContextTypes.DEFA
         
         contexto_planilha = f"""
 DADOS ATUAIS DA PLANILHA FINANCEIRA:
+
+SALDOS DAS CONTAS:
 Saldo total geral: R$ {total_geral:,.2f}
 Contas disponíveis:
 {chr(10).join(saldos_info)}
+"""
+
+    # Adicionar dados de transações se disponíveis
+    if not cache["transacoes_df"].empty:
+        transacoes_info = []
+        for _, row in cache["transacoes_df"].iterrows():
+            # Capturar colunas comuns de transações
+            data = row.get('Data', row.get('DATA', 'N/A'))
+            descricao = row.get('Descrição', row.get('DESCRIÇÃO', row.get('Categoria', 'N/A')))
+            valor_raw = row.get('Valor', row.get('VALOR', row.get('Valor (R$)', '0')))
+            valor_float = parse_valor_brl(valor_raw)
+            
+            if valor_float != 0:  # Só incluir transações com valor
+                transacoes_info.append(f"- {data}: {descricao} - R$ {valor_float:,.2f}")
+        
+        if transacoes_info:
+            contexto_planilha += f"""
+
+TRANSAÇÕES RECENTES (últimas 10):
+{chr(10).join(transacoes_info[:10])}
+"""
+    
+    contexto_planilha += f"""
 
 Última atualização: {cache["last_update"].strftime("%d/%m/%Y %H:%M:%S") if cache["last_update"] else "Nunca"}
 """
@@ -136,10 +174,13 @@ COMANDOS DISPONÍVEIS:
 INSTRUÇÕES:
 1. Responda de forma amigável e útil em português brasileiro
 2. Se o usuário perguntar sobre saldos, use os dados da planilha acima
-3. Se pedir gráfico, sugira usar o comando /grafico
-4. Se não souber algo específico, seja honesto e sugira comandos disponíveis
-5. Mantenha respostas concisas mas informativas
-6. Use emojis quando apropriado
+3. Se perguntar sobre gastos/transações, analise os dados de transações disponíveis
+4. Para perguntas sobre períodos específicos (ex: "gastos de agosto"), filtre as transações por data
+5. Se pedir gráfico, sugira usar o comando /grafico
+6. Se não souber algo específico, seja honesto e sugira comandos disponíveis
+7. Mantenha respostas concisas mas informativas
+8. Use emojis quando apropriado
+9. Para listar gastos, organize por valor (maiores primeiro) e inclua data e descrição
 
 PERGUNTA DO USUÁRIO: {user_message}
 
