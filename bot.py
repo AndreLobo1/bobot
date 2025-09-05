@@ -89,34 +89,7 @@ def parse_ano_mes(texto):
     texto_limpo = texto.strip().lower()
     logger.info(f"🔍 Texto limpo: '{texto_limpo}'")
     
-    # Mapeamento de meses por nome
-    meses = {
-        'janeiro': 1, 'jan': 1, '1': 1,
-        'fevereiro': 2, 'fev': 2, '2': 2,
-        'março': 3, 'mar': 3, '3': 3,
-        'abril': 4, 'abr': 4, '4': 4,
-        'maio': 5, 'mai': 5, '5': 5,
-        'junho': 6, 'jun': 6, '6': 6,
-        'julho': 7, 'jul': 7, '7': 7,
-        'agosto': 8, 'ago': 8, '8': 8,
-        'setembro': 9, 'set': 9, '9': 9,
-        'outubro': 10, 'out': 10, '10': 10,
-        'novembro': 11, 'nov': 11, '11': 11,
-        'dezembro': 12, 'dez': 12, '12': 12
-    }
-    
-    # ESTRATÉGIA 1: Buscar por mês por nome primeiro
-    for mes_nome, mes_num in meses.items():
-        if mes_nome in texto_limpo:
-            logger.info(f"🔍 Encontrou mês por nome: '{mes_nome}' -> {mes_num}")
-            # Procura por ano (4 dígitos)
-            ano_match = re.search(r'(\d{4})', texto_limpo)
-            if ano_match:
-                ano = int(ano_match.group(1))
-                logger.info(f"🔍 Resultado final (nome): ano={ano}, mes={mes_num}")
-                return ano, mes_num
-    
-    # ESTRATÉGIA 2: Padrão YYYY/MM ou YYYY-MM
+    # ESTRATÉGIA 1: Padrão YYYY/MM ou YYYY-MM (PRIORIDADE MÁXIMA)
     match = re.search(r'(\d{4})[/-](\d{1,2})', texto_limpo)
     if match:
         ano = int(match.group(1))
@@ -124,7 +97,7 @@ def parse_ano_mes(texto):
         logger.info(f"🔍 Resultado final (YYYY/MM): ano={ano}, mes={mes}")
         return ano, mes
     
-    # ESTRATÉGIA 3: Padrão MM/YYYY ou MM-YYYY
+    # ESTRATÉGIA 2: Padrão MM/YYYY ou MM-YYYY
     match = re.search(r'(\d{1,2})[/-](\d{4})', texto_limpo)
     if match:
         mes = int(match.group(1))
@@ -132,7 +105,7 @@ def parse_ano_mes(texto):
         logger.info(f"🔍 Resultado final (MM/YYYY): ano={ano}, mes={mes}")
         return ano, mes
     
-    # ESTRATÉGIA 4: Padrão YYYY MM (com espaço)
+    # ESTRATÉGIA 3: Padrão YYYY MM (com espaço)
     match = re.search(r'(\d{4})\s+(\d{1,2})', texto_limpo)
     if match:
         ano = int(match.group(1))
@@ -140,13 +113,39 @@ def parse_ano_mes(texto):
         logger.info(f"🔍 Resultado final (YYYY MM): ano={ano}, mes={mes}")
         return ano, mes
     
-    # ESTRATÉGIA 5: Padrão MM YYYY (com espaço)
+    # ESTRATÉGIA 4: Padrão MM YYYY (com espaço)
     match = re.search(r'(\d{1,2})\s+(\d{4})', texto_limpo)
     if match:
         mes = int(match.group(1))
         ano = int(match.group(2))
         logger.info(f"🔍 Resultado final (MM YYYY): ano={ano}, mes={mes}")
         return ano, mes
+    
+    # ESTRATÉGIA 5: Mês por nome (APENAS DEPOIS de tentar padrões numéricos)
+    meses = {
+        'janeiro': 1, 'jan': 1,
+        'fevereiro': 2, 'fev': 2,
+        'março': 3, 'mar': 3,
+        'abril': 4, 'abr': 4,
+        'maio': 5, 'mai': 5,
+        'junho': 6, 'jun': 6,
+        'julho': 7, 'jul': 7,
+        'agosto': 8, 'ago': 8,
+        'setembro': 9, 'set': 9,
+        'outubro': 10, 'out': 10,
+        'novembro': 11, 'nov': 11,
+        'dezembro': 12, 'dez': 12
+    }
+    
+    for mes_nome, mes_num in meses.items():
+        if mes_nome in texto_limpo:
+            logger.info(f"🔍 Encontrou mês por nome: '{mes_nome}' -> {mes_num}")
+            # Procura por ano (4 dígitos) APENAS se não for parte de outro número
+            ano_match = re.search(r'\b(\d{4})\b', texto_limpo)
+            if ano_match:
+                ano = int(ano_match.group(1))
+                logger.info(f"🔍 Resultado final (nome): ano={ano}, mes={mes_num}")
+                return ano, mes_num
     
     logger.error(f"❌ Nenhum padrão encontrado para: '{texto}'")
     return None, None
@@ -156,11 +155,9 @@ async def selecionar_periodo_planilha(spreadsheet, ano, mes):
     try:
         home_sheet = spreadsheet.worksheet("Home")
         
-        # Seleciona o mês (coluna B4)
-        home_sheet.update('B4', mes)
-        
-        # Seleciona o ano (coluna B5)
-        home_sheet.update('B5', ano)
+        # Corrige o formato de atualização - usa update_cell em vez de update
+        home_sheet.update_cell(4, 2, mes)  # B4 = linha 4, coluna 2
+        home_sheet.update_cell(5, 2, ano)  # B5 = linha 5, coluna 2
         
         # Aguarda um pouco para os gráficos serem atualizados
         import asyncio
@@ -210,66 +207,279 @@ async def buscar_grafico_planilha(ano, mes):
 async def buscar_grafico_aba_home(spreadsheet, ano, mes):
     """Busca gráficos na aba Home onde são criados dinamicamente."""
     try:
+        logger.info(f"🔍 Iniciando busca de gráficos para {mes:02d}/{ano}")
+        
         # Procura pela aba Home
         home_sheet = None
         try:
             home_sheet = spreadsheet.worksheet("Home")
-        except:
+            logger.info("✅ Aba 'Home' encontrada")
+        except Exception as e:
+            logger.error(f"❌ Aba 'Home' não encontrada: {e}")
             return None, "Aba 'Home' não encontrada"
         
         # Aguarda um pouco mais para garantir que os gráficos foram atualizados
         import asyncio
-        await asyncio.sleep(1)
+        await asyncio.sleep(3)
+        logger.info("⏳ Aguardou 3 segundos para atualização dos gráficos")
         
-        # Verifica se há gráficos na aba Home
-        charts = home_sheet.get_charts()
-        if not charts:
-            return None, "Nenhum gráfico encontrado na aba 'Home'. Aguarde mais alguns segundos e tente novamente."
-        
-        # Filtra gráficos por tipo (Entradas ou Saídas)
-        graficos_disponiveis = []
-        
-        for chart in charts:
-            chart_title = chart.get('title', '').lower()
-            chart_type = None
+        # ESTRATÉGIA SIMPLIFICADA: Tentar obter dados básicos primeiro
+        try:
+            logger.info("🔍 ESTRATÉGIA SIMPLIFICADA: Obtendo informações básicas")
             
-            if 'entrada' in chart_title:
-                chart_type = 'entradas'
-            elif 'saída' in chart_title or 'saida' in chart_title:
-                chart_type = 'saidas'
-            elif 'cash flow' in chart_title or 'cashflow' in chart_title:
-                chart_type = 'cashflow'
-            else:
-                # Se não consegue identificar, assume que é um gráfico válido
-                chart_type = 'geral'
+            # Obtém o ID da planilha
+            spreadsheet_id = spreadsheet.id
+            logger.info(f"📋 ID da planilha: {spreadsheet_id}")
             
-            graficos_disponiveis.append({
-                'chart': chart,
-                'type': chart_type,
-                'title': chart.get('title', 'Gráfico sem título')
-            })
-        
-        if not graficos_disponiveis:
-            return None, "Nenhum gráfico válido encontrado na aba 'Home'"
-        
-        # Retorna o primeiro gráfico encontrado (pode ser expandido para escolha)
-        primeiro_grafico = graficos_disponiveis[0]
-        chart_image = primeiro_grafico['chart'].get_image()
-        
-        if chart_image:
-            tipo_descricao = {
-                'entradas': 'Gráfico de Entradas',
-                'saidas': 'Gráfico de Saídas', 
-                'cashflow': 'Gráfico de Cash Flow',
-                'geral': 'Gráfico Geral'
-            }.get(primeiro_grafico['type'], 'Gráfico')
+            # Lista todas as abas para debug
+            worksheets = spreadsheet.worksheets()
+            logger.info(f"📊 Abas encontradas: {[ws.title for ws in worksheets]}")
             
-            return chart_image, f"{tipo_descricao} encontrado na aba 'Home' para {mes:02d}/{ano}"
+            # Encontra o ID da aba Home
+            sheet_id = None
+            for worksheet in worksheets:
+                if worksheet.title == "Home":
+                    sheet_id = worksheet.id
+                    break
+            
+            if not sheet_id:
+                logger.error("❌ ID da aba Home não encontrado")
+                return None, "Aba 'Home' não encontrada"
+            
+            logger.info(f"📋 ID da aba Home: {sheet_id}")
+            
+            # ESTRATÉGIA ALTERNATIVA: Tentar usar a API REST do Google Sheets
+            try:
+                logger.info("🔍 ESTRATÉGIA ALTERNATIVA: Tentando API REST do Google Sheets")
+                
+                # Gera um novo token de acesso
+                credentials_json = base64.b64decode(GOOGLE_CREDENTIALS_BASE64).decode('utf-8')
+                credentials_dict = json.loads(credentials_json)
+                from oauth2client.service_account import ServiceAccountCredentials
+                scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+                creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
+                
+                # Obtém o token de acesso
+                token = creds.get_access_token().access_token
+                logger.info(f"✅ Token obtido com sucesso (primeiros 10 chars): {token[:10]}...")
+                
+                import requests
+                
+                # Constrói a URL da API
+                url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}"
+                logger.info(f"🌐 URL da API: {url}")
+                
+                # Faz a requisição para obter informações da planilha incluindo gráficos
+                response = requests.get(url, headers={
+                    'Authorization': f'Bearer {token}',
+                    'Content-Type': 'application/json'
+                })
+                
+                logger.info(f"📡 Status da resposta: {response.status_code}")
+                
+                if response.status_code != 200:
+                    logger.error(f"❌ Erro na API REST: {response.status_code} - {response.text}")
+                    return None, f"Erro ao acessar planilha: {response.status_code}"
+                
+                data = response.json()
+                logger.info(f"✅ Dados da planilha obtidos com sucesso")
+                
+                # Procura por gráficos na aba Home
+                charts = []
+                for sheet in data.get('sheets', []):
+                    if sheet.get('properties', {}).get('title') == 'Home':
+                        logger.info(f"📊 Encontrou aba Home nos dados da API")
+                        if 'charts' in sheet:
+                            charts = sheet['charts']
+                            logger.info(f"📈 Encontrados {len(charts)} gráficos na aba Home")
+                        else:
+                            logger.warning("⚠️ Nenhum gráfico encontrado na aba Home")
+                        break
+                
+                if not charts:
+                    logger.warning("❌ Nenhum gráfico encontrado na aba Home via API REST")
+                    return None, "Nenhum gráfico encontrado na aba 'Home'. Aguarde mais alguns segundos e tente novamente."
+                
+                # Processa os gráficos encontrados
+                graficos_disponiveis = []
+                
+                for i, chart in enumerate(charts):
+                    try:
+                        chart_id = chart.get('chartId', f'chart_{i}')
+                        chart_title = chart.get('basicChart', {}).get('chartId', '')
+                        
+                        logger.info(f"📊 Processando gráfico {i+1}: ID={chart_id}, Título={chart_title}")
+                        
+                        chart_type = None
+                        if 'entrada' in str(chart_title).lower():
+                            chart_type = 'entradas'
+                        elif 'saída' in str(chart_title).lower() or 'saida' in str(chart_title).lower():
+                            chart_type = 'saidas'
+                        elif 'cash flow' in str(chart_title).lower() or 'cashflow' in str(chart_title).lower():
+                            chart_type = 'cashflow'
+                        else:
+                            chart_type = 'geral'
+                        
+                        graficos_disponiveis.append({
+                            'chart': chart,
+                            'type': chart_type,
+                            'title': chart_title or f'Gráfico {i+1}',
+                            'chart_id': chart_id
+                        })
+                        
+                        logger.info(f"✅ Gráfico {i+1} processado: tipo={chart_type}")
+                        
+                    except Exception as e:
+                        logger.warning(f"⚠️ Erro ao processar gráfico {i+1}: {e}")
+                        continue
+                
+                if not graficos_disponiveis:
+                    logger.error("❌ Nenhum gráfico válido encontrado")
+                    return None, "Nenhum gráfico válido encontrado na aba 'Home'"
+                
+                logger.info(f"🎯 Total de gráficos válidos: {len(graficos_disponiveis)}")
+                
+                # ESTRATÉGIA FINAL: Tentar obter a imagem do primeiro gráfico
+                primeiro_grafico = graficos_disponiveis[0]
+                chart_id = primeiro_grafico['chart_id']
+                
+                logger.info(f"🖼️ Tentando obter imagem do gráfico: {chart_id}")
+                
+                # Tenta obter a imagem do gráfico
+                image_url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/sheets/{sheet_id}/charts/{chart_id}/image"
+                logger.info(f"🌐 URL da imagem: {image_url}")
+                
+                image_response = requests.get(image_url, headers={
+                    'Authorization': f'Bearer {token}',
+                    'Content-Type': 'application/json'
+                })
+                
+                logger.info(f"📡 Status da resposta da imagem: {image_response.status_code}")
+                
+                if image_response.status_code == 200:
+                    logger.info(f"✅ Imagem obtida com sucesso! Tamanho: {len(image_response.content)} bytes")
+                    
+                    # Verifica se o conteúdo é válido
+                    if len(image_response.content) > 100:  # Deve ter pelo menos 100 bytes
+                        logger.info(f"✅ Conteúdo da imagem parece válido")
+                        return image_response.content, f"Gráfico encontrado na aba 'Home' para {mes:02d}/{ano}"
+                    else:
+                        logger.warning(f"⚠️ Conteúdo da imagem muito pequeno: {len(image_response.content)} bytes")
+                        logger.warning(f"📄 Primeiros bytes: {image_response.content[:50]}")
+                else:
+                    logger.warning(f"⚠️ Não foi possível obter imagem do gráfico: {image_response.status_code}")
+                    logger.warning(f"📄 Resposta da API: {image_response.text[:200]}...")
+                
+                # ESTRATÉGIA 2: Tentar exportar a aba Home como PNG (PRIORIDADE MÁXIMA)
+                try:
+                    logger.info("🖼️ ESTRATÉGIA 2: Tentando exportar aba Home como PNG")
+                    
+                    # PRIMEIRA TENTATIVA: PNG sem range (sempre funciona)
+                    png_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=png&gid={sheet_id}"
+                    logger.info(f"🌐 URL do PNG (sem range): {png_url}")
+                    
+                    png_response = requests.get(png_url, headers={
+                        'Authorization': f'Bearer {token}',
+                        'Accept': 'image/png',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    })
+                    
+                    logger.info(f"📡 Status da resposta do PNG: {png_response.status_code}")
+                    
+                    if png_response.status_code == 200 and len(png_response.content) > 1000:
+                        logger.info(f"✅ PNG obtido com sucesso! Tamanho: {len(png_response.content)} bytes")
+                        return png_response.content, f"Imagem da aba 'Home' para {mes:02d}/{ano}"
+                    else:
+                        logger.warning(f"⚠️ PNG não obtido: {png_response.status_code}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Erro ao exportar PNG: {e}")
+
+                # ESTRATÉGIA 3: Tentar exportar a aba Home como PDF (fallback)
+                try:
+                    logger.info("📄 ESTRATÉGIA 3: Tentando exportar aba Home como PDF (fallback)")
+                    
+                    # URL para exportar a aba Home como PDF sem range (mais confiável)
+                    pdf_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=pdf&gid={sheet_id}"
+                    logger.info(f"🌐 URL do PDF (sem range): {pdf_url}")
+                    
+                    pdf_response = requests.get(pdf_url, headers={
+                        'Authorization': f'Bearer {token}',
+                        'Content-Type': 'application/pdf'
+                    })
+                    
+                    logger.info(f"📡 Status da resposta do PDF: {pdf_response.status_code}")
+                    
+                    if pdf_response.status_code == 200 and len(pdf_response.content) > 1000:
+                        logger.info(f"✅ PDF obtido com sucesso! Tamanho: {len(pdf_response.content)} bytes")
+                        return pdf_response.content, f"PDF da aba 'Home' para {mes:02d}/{ano}"
+                    else:
+                        logger.warning(f"⚠️ PDF não obtido: {pdf_response.status_code}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Erro ao exportar PDF: {e}")
+
+                # ESTRATÉGIA 4: Tentar obter dados como CSV e criar resumo
+                try:
+                    logger.info("📊 ESTRATÉGIA 4: Tentando obter dados como CSV")
+                    
+                    # URL para exportar dados como CSV
+                    csv_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv&gid={sheet_id}"
+                    logger.info(f"🌐 URL do CSV: {csv_url}")
+                    
+                    csv_response = requests.get(csv_url, headers={
+                        'Authorization': f'Bearer {token}',
+                        'Content-Type': 'text/csv'
+                    })
+                    
+                    logger.info(f"📡 Status da resposta CSV: {csv_response.status_code}")
+                    
+                    if csv_response.status_code == 200 and len(csv_response.content) > 100:
+                        logger.info(f"✅ CSV obtido com sucesso! Tamanho: {len(csv_response.content)} bytes")
+                        return "SUCCESS_DATA_ONLY", f"Dados da aba 'Home' para {mes:02d}/{ano}"
+                    else:
+                        logger.warning(f"⚠️ CSV não obtido: {csv_response.status_code}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Erro ao exportar CSV: {e}")
+
+                # ESTRATÉGIA 5: Tentar obter uma visualização geral via Google Drive API
+                try:
+                    logger.info("🖼️ ESTRATÉGIA 5: Tentando visualização via Google Drive API")
+                    
+                    # URL para visualização geral da planilha
+                    drive_url = f"https://drive.google.com/uc?export=view&id={spreadsheet_id}"
+                    logger.info(f"🌐 URL do Drive: {drive_url}")
+                    
+                    drive_response = requests.get(drive_url, headers={
+                        'Authorization': f'Bearer {token}',
+                        'Accept': 'image/*'
+                    })
+                    
+                    logger.info(f"📡 Status da resposta Drive: {drive_response.status_code}")
+                    
+                    if drive_response.status_code == 200 and len(drive_response.content) > 1000:
+                        logger.info(f"✅ Drive view obtido com sucesso! Tamanho: {len(drive_response.content)} bytes")
+                        return drive_response.content, f"Visualização da planilha para {mes:02d}/{ano}"
+                    else:
+                        logger.warning(f"⚠️ Drive view não obtido: {drive_response.status_code}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Erro ao obter Drive view: {e}")
+
+                logger.warning("❌ Todas as estratégias falharam")
+                return "SUCCESS_NO_IMAGE", f"Gráfico encontrado mas imagem não disponível para {mes:02d}/{ano}"
+                
+            except Exception as e:
+                logger.error(f"❌ Erro ao usar API REST: {e}")
+                return None, f"Erro ao acessar gráficos: {str(e)}"
         
-        return None, "Não foi possível obter a imagem do gráfico"
+        except Exception as e:
+            logger.error(f"❌ Erro ao obter informações básicas: {e}")
+            return None, f"Erro ao acessar planilha: {str(e)}"
         
     except Exception as e:
-        logger.error(f"Erro ao buscar na aba Home: {e}")
+        logger.error(f"❌ Erro geral ao buscar na aba Home: {e}")
         return None, f"Erro ao buscar na aba Home: {str(e)}"
 
 def buscar_graficos_todas_abas(spreadsheet, ano, mes):
@@ -445,13 +655,54 @@ async def grafico_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chart_image, message = await buscar_grafico_planilha(ano, mes)
         
         if chart_image:
-            # Envia a imagem do gráfico
-            await update.message.reply_photo(
-                photo=chart_image,
-                caption=f"📊 <b>Gráfico {mes:02d}/{ano}</b>\n\n{message}",
-                parse_mode='HTML'
-            )
-            await processing_msg.delete()
+            if chart_image == "SUCCESS_NO_IMAGE":
+                # Gráfico encontrado mas imagem não disponível
+                await processing_msg.edit_text(
+                    f"✅ <b>Gráfico encontrado!</b>\n\n"
+                    f"Período: <b>{mes:02d}/{ano}</b>\n"
+                    f"Status: <i>{message}</i>\n\n"
+                    f"<b>Nota:</b> O gráfico foi encontrado na planilha, mas não foi possível obter a imagem. "
+                    f"Isso pode acontecer devido a limitações da API do Google Sheets.",
+                    parse_mode='HTML'
+                )
+            elif chart_image == "SUCCESS_DATA_ONLY":
+                # Dados encontrados mas sem imagem
+                await processing_msg.edit_text(
+                    f"📊 <b>Dados encontrados!</b>\n\n"
+                    f"Período: <b>{mes:02d}/{ano}</b>\n\n"
+                    f"{message}\n\n"
+                    f"<b>Nota:</b> Os dados foram encontrados, mas não foi possível gerar uma imagem do gráfico.",
+                    parse_mode='HTML'
+                )
+            else:
+                # Envia a imagem/PDF do gráfico
+                logger.info(f"📤 Enviando arquivo (tamanho: {len(chart_image)} bytes)")
+                try:
+                    # Verifica se é PDF ou imagem
+                    if "PDF" in message or len(chart_image) > 10000:  # PDFs são maiores
+                        await update.message.reply_document(
+                            document=chart_image,
+                            filename=f"grafico_{mes:02d}_{ano}.pdf",
+                            caption=f"📊 <b>Gráfico {mes:02d}/{ano}</b>\n\n{message}",
+                            parse_mode='HTML'
+                        )
+                    else:
+                        await update.message.reply_photo(
+                            photo=chart_image,
+                            caption=f"📊 <b>Gráfico {mes:02d}/{ano}</b>\n\n{message}",
+                            parse_mode='HTML'
+                        )
+                    await processing_msg.delete()
+                    logger.info("✅ Arquivo enviado com sucesso!")
+                except Exception as photo_error:
+                    logger.error(f"❌ Erro ao enviar arquivo: {photo_error}")
+                    await processing_msg.edit_text(
+                        f"⚠️ <b>Gráfico encontrado mas erro ao enviar!</b>\n\n"
+                        f"Período: <b>{mes:02d}/{ano}</b>\n"
+                        f"Status: <i>{message}</i>\n\n"
+                        f"<b>Erro:</b> {str(photo_error)}",
+                        parse_mode='HTML'
+                    )
         else:
             await processing_msg.edit_text(
                 f"❌ <b>Gráfico não encontrado!</b>\n\n"
